@@ -175,10 +175,10 @@ function Test-SystemRequirements {
                 try {
                     $fileVersion = (Get-ItemProperty $path).VersionInfo.ProductVersion
                     if ($path -match "Office16") {
-                        $officeVersion = "16.0 (Executable gefunden)"
+                        $officeVersion = "16.0 (Executable gefunden - Version: $fileVersion)"
                         $officeMajorVersion = 16
                     } elseif ($path -match "Office15") {
-                        $officeVersion = "15.0 (Executable gefunden)"
+                        $officeVersion = "15.0 (Executable gefunden - Version: $fileVersion)"
                         $officeMajorVersion = 15
                     }
                     Write-Log "Office durch Executable gefunden: $officeVersion (Pfad: $path)" "INFO"
@@ -1127,7 +1127,7 @@ function Set-OutlookCustomizer {
             $officeVersion = (Get-ItemProperty -Path $officeKey -ErrorAction SilentlyContinue).ProductVersion
             if ($officeVersion) {
                 $outlookVersion = $officeVersion
-                Write-Log "Erkannte Office-Version: $officeVersion" "INFO"
+                Write-Log "Erkannte Office-Version für Outlook: $outlookVersion" "INFO"
             }
         }
         
@@ -1138,10 +1138,12 @@ function Set-OutlookCustomizer {
         
         if ($newOutlookProcess -or (Test-Path $newOutlookPath)) {
             $outlookType = "New"
-            Write-Log "Neues Outlook (Microsoft Store/Web) erkannt" "INFO"
+            $versionText = if ($outlookVersion) { $outlookVersion } else { "Unbekannt" }
+            Write-Log "Neues Outlook (Microsoft Store/Web) erkannt - Version: $versionText" "INFO"
         } elseif ($classicOutlookProcess) {
             $outlookType = "Classic"
-            Write-Log "Klassisches Outlook erkannt" "INFO"
+            $versionText = if ($outlookVersion) { $outlookVersion } else { "Unbekannt" }
+            Write-Log "Klassisches Outlook erkannt - Version: $versionText" "INFO"
         }
     } catch {
         Write-Log "Fehler bei der Outlook-Versionserkennung: $($_.Exception.Message)" "WARN"
@@ -1220,10 +1222,11 @@ function Set-OutlookCustomizer {
     } elseif ($totalSuccess -eq 0) {
         Write-Log "Keine Schriftart-Einstellungen konnten gesetzt werden" "ERROR"
     } else {
-        Write-Log "Outlook-Schriftart-Konfiguration abgeschlossen: $totalSuccess Einstellungen in $pathsFound Registry-Pfaden gesetzt" "INFO"
+        Write-Log "Outlook-Schriftart-Konfiguration abgeschlossen: $totalSuccess Einstellungen in $pathsFound Registry-Pfaden gesetzt (Version: $(if ($outlookVersion) { $outlookVersion } else { 'Unbekannt' }))" "INFO"
         
         if ($outlookType -eq "New") {
-            Write-Log "WICHTIG: Bei Verwendung des neuen Outlook müssen Sie die Schriftart möglicherweise manuell in Outlook > Einstellungen > E-Mail > Verfassen und antworten konfigurieren" "WARN"
+            $versionText = if ($outlookVersion) { $outlookVersion } else { "Unbekannt" }
+            Write-Log "WICHTIG: Bei Verwendung des neuen Outlook (Version: $versionText) müssen Sie die Schriftart möglicherweise manuell in Outlook > Einstellungen > E-Mail > Verfassen und antworten konfigurieren" "WARN"
         }
     }
 }
@@ -1326,16 +1329,65 @@ function Restart-ExplorerIfRunning {
     $explorerRunning = Get-Process -Name "explorer" -ErrorAction SilentlyContinue
 
     if ($explorerRunning) {
+        Write-Log "Explorer-Neustart wird vorbereitet - sichere geöffnete Fenster" "INFO"
+        
+        # Speichere alle geöffneten Explorer-Fenster
+        $openWindows = @()
+        try {
+            $shell = New-Object -ComObject Shell.Application
+            foreach ($window in $shell.Windows()) {
+                if ($window.Name -eq "Windows Explorer" -or $window.Name -eq "File Explorer") {
+                    $path = $window.Document.Folder.Self.Path
+                    if ($path -and (Test-Path $path)) {
+                        $openWindows += $path
+                        Write-Log "Gespeichert: Explorer-Fenster für Pfad $path" "INFO"
+                    }
+                }
+            }
+            [System.Runtime.Interopservices.Marshal]::ReleaseComObject($shell) | Out-Null
+        } catch {
+            Write-Log "Fehler beim Speichern der Explorer-Fenster: $($_.Exception.Message)" "WARN"
+        }
+
+        Write-Log "Stoppe Windows-Explorer ($(($openWindows).Count) Fenster gespeichert)" "INFO"
+        
         # Stoppe den Windows-Explorer
         Stop-Process -Name "explorer" -Force
 
         # Warte einen Moment, um sicherzustellen, dass der Prozess vollständig beendet ist
-        Start-Sleep -Seconds 1
+        Start-Sleep -Seconds 2
 
         # Starte den Windows-Explorer neu
         Start-Process "explorer"
+        
+        # Warte bis Explorer vollständig geladen ist
+        Start-Sleep -Seconds 3
+        
+        # Stelle die gespeicherten Fenster wieder her
+        if ($openWindows.Count -gt 0) {
+            Write-Log "Stelle $($openWindows.Count) Explorer-Fenster wieder her" "INFO"
+            
+            foreach ($path in $openWindows) {
+                try {
+                    if (Test-Path $path) {
+                        Start-Process "explorer.exe" -ArgumentList "`"$path`""
+                        Start-Sleep -Milliseconds 500  # Kurze Pause zwischen Fenstern
+                        Write-Log "Wiederhergestellt: Explorer-Fenster für $path" "INFO"
+                    } else {
+                        Write-Log "Pfad nicht mehr verfügbar: $path" "WARN"
+                    }
+                } catch {
+                    Write-Log "Fehler beim Wiederherstellen von $path : $($_.Exception.Message)" "ERROR"
+                }
+            }
+            
+            Write-Log "Explorer-Fenster-Wiederherstellung abgeschlossen" "INFO"
+        } else {
+            Write-Log "Keine Explorer-Fenster zum Wiederherstellen gefunden" "INFO"
+        }
+        
     } else {
-        Write-Host "Der Windows-Explorer ist aktuell nicht aktiv – kein Neustart erforderlich."
+        Write-Log "Der Windows-Explorer ist aktuell nicht aktiv – kein Neustart erforderlich." "INFO"
     }
 }
 
