@@ -1331,16 +1331,52 @@ function Restart-ExplorerIfRunning {
     if ($explorerRunning) {
         Write-Log "Explorer-Neustart wird vorbereitet - sichere geöffnete Fenster" "INFO"
         
-        # Speichere alle geöffneten Explorer-Fenster
+        # Speichere alle geöffneten Explorer-Fenster mit ihren spezifischen Pfaden
         $openWindows = @()
         try {
             $shell = New-Object -ComObject Shell.Application
             foreach ($window in $shell.Windows()) {
-                if ($window.Name -eq "Windows Explorer" -or $window.Name -eq "File Explorer") {
-                    $path = $window.Document.Folder.Self.Path
-                    if ($path -and (Test-Path $path)) {
-                        $openWindows += $path
-                        Write-Log "Gespeichert: Explorer-Fenster für Pfad $path" "INFO"
+                # Prüfe verschiedene Fenstertypen
+                if ($window.Name -match "Windows Explorer|File Explorer|Explorer" -or $window.FullName -match "explorer\.exe") {
+                    try {
+                        # Versuche den aktuellen Pfad zu ermitteln
+                        $currentPath = $null
+                        
+                        # Methode 1: LocationURL (für normale Ordner)
+                        if ($window.LocationURL) {
+                            $currentPath = $window.LocationURL -replace "file:///", "" -replace "/", "\"
+                            # Einfache URL-Dekodierung ohne System.Web
+                            $currentPath = $currentPath -replace "%20", " "
+                            $currentPath = $currentPath -replace "%C3%A4", "ä"
+                            $currentPath = $currentPath -replace "%C3%B6", "ö"
+                            $currentPath = $currentPath -replace "%C3%BC", "ü"
+                            $currentPath = $currentPath -replace "%C3%9F", "ß"
+                        }
+                        
+                        # Methode 2: Document.Folder.Self.Path (Fallback)
+                        if (-not $currentPath -and $window.Document -and $window.Document.Folder) {
+                            $currentPath = $window.Document.Folder.Self.Path
+                        }
+                        
+                        # Methode 3: LocationName für spezielle Ordner - aber nur für echte Pfade
+                        if (-not $currentPath -and $window.LocationName) {
+                            $locationName = $window.LocationName
+                            # Filtere "Dieser PC" und andere Computer-Views heraus
+                            if ($locationName -notmatch "Dieser PC|This PC|Computer|Arbeitsplatz") {
+                                $currentPath = $locationName
+                            }
+                        }
+                        
+                        # Nur gültige, zugängliche Pfade speichern (keine Computer-Views)
+                        if ($currentPath -and $currentPath -ne "" -and (Test-Path $currentPath -ErrorAction SilentlyContinue)) {
+                            # Doppelte Pfade vermeiden
+                            if ($openWindows -notcontains $currentPath) {
+                                $openWindows += $currentPath
+                                Write-Log "Gespeichert: Explorer-Fenster für Pfad '$currentPath'" "INFO"
+                            }
+                        }
+                    } catch {
+                        Write-Log "Fehler beim Ermitteln des Pfads für ein Explorer-Fenster: $($_.Exception.Message)" "WARN"
                     }
                 }
             }
@@ -1361,7 +1397,7 @@ function Restart-ExplorerIfRunning {
         Start-Process "explorer"
         
         # Warte bis Explorer vollständig geladen ist
-        Start-Sleep -Seconds 3
+        Start-Sleep -Seconds 4
         
         # Stelle die gespeicherten Fenster wieder her
         if ($openWindows.Count -gt 0) {
@@ -1369,15 +1405,16 @@ function Restart-ExplorerIfRunning {
             
             foreach ($path in $openWindows) {
                 try {
-                    if (Test-Path $path) {
+                    # Nur echte Dateisystem-Pfade wiederherstellen
+                    if (Test-Path $path -ErrorAction SilentlyContinue) {
                         Start-Process "explorer.exe" -ArgumentList "`"$path`""
+                        Write-Log "Wiederhergestellt: Explorer-Fenster für '$path'" "INFO"
                         Start-Sleep -Milliseconds 500  # Kurze Pause zwischen Fenstern
-                        Write-Log "Wiederhergestellt: Explorer-Fenster für $path" "INFO"
                     } else {
-                        Write-Log "Pfad nicht mehr verfügbar: $path" "WARN"
+                        Write-Log "Pfad nicht mehr verfügbar: '$path'" "WARN"
                     }
                 } catch {
-                    Write-Log "Fehler beim Wiederherstellen von $path : $($_.Exception.Message)" "ERROR"
+                    Write-Log "Fehler beim Wiederherstellen von '$path': $($_.Exception.Message)" "ERROR"
                 }
             }
             
