@@ -1,4 +1,5 @@
 _Entwicklung
+node_modules/
 *.pdf
 *.docx
 *.txt
