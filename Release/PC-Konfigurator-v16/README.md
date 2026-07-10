@@ -1,7 +1,7 @@
 # PC-Konfigurator
 
 **Stand:** 12.06.2026
-**Autor:** Thomas Gorontzy
+**Autor:** GoroTech-Tools
 **Plattform:** Windows 10 (Build 18362+) / Windows 11, Office 2013+
 
 ## Überblick
