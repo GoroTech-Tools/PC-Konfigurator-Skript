@@ -1,0 +1,31 @@
+{
+  "default": true,
+  "MD013": false,
+  "MD024": false,
+  "MD025": false,
+  "MD026": false,
+  "MD033": false,
+  "MD036": false,
+  "MD041": false,
+  "MD046": false,
+  "MD047": true,
+  "MD012": {
+    "maximum": 2,
+    "allow_different_nesting": true
+  },
+  "MD029": {
+    "style": "ordered"
+  },
+  "MD030": {
+    "ul_single": 1,
+    "ol_single": 1,
+    "ul_multi": 1,
+    "ol_multi": 1
+  },
+  "MD034": false,
+  "MD056": false,
+  "MD060": false,
+  "MD035": {
+    "style": "---"
+  }
+}

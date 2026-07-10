@@ -1,0 +1,12 @@
+{
+  "name": "pc-konfigurator-tools",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Lokale Tooling-Abhängigkeiten für Linting",
+  "scripts": {
+    "lint:md": "markdownlint-cli2 --config .markdownlint.json README.md docs/DOKUMENTATION_ANWENDER.md docs/DOKUMENTATION_TECHNIK.md Release/CHANGELOG.md"
+  },
+  "devDependencies": {
+    "markdownlint-cli2": "^0.15.0"
+  }
+}

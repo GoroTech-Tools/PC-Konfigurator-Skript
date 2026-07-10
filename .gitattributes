@@ -1,0 +1,12 @@
+* text=auto
+
+# PowerShell: auf Windows robust mit CRLF
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+
+# Dokumentation/Config: UTF-8, normale Textbehandlung
+*.md  text
+*.json text
+*.yml text
+*.yaml text
