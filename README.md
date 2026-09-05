@@ -1,6 +1,7 @@
 # PC-Konfigurator
 
-**Stand:** 12.06.2026
+**Stand:** 16.08.2026
+**Version:** 2.0
 **Autor:** Thomas Gorontzy
 **Plattform:** Windows 10 (Build 18362+) / Windows 11, Office 2013+
 
@@ -8,12 +9,16 @@
 
 Der PC-Konfigurator richtet Windows- und Office-Umgebungen automatisiert ein. Dabei werden Vorlagen und Schriftarten synchronisiert, Office- und Windows-Einstellungen gesetzt sowie Abläufe protokolliert.
 
+Die Release-Versionierung folgt dem SemVer-Stil `major.minor` (z. B. `2.0`, `2.1`). Die aktuelle Hauptversion ist 2.0.
+
 ## Dokumentation
 
 - Anwenderdokumentation: `docs/DOKUMENTATION_ANWENDER.md`
 - Technische Dokumentation: `docs/DOKUMENTATION_TECHNIK.md`
 - Registry-Übersicht: `docs/Registry-Einstellungen.md`
+- Detaillierte Einstellungsübersicht: `docs/PC-Konfigurator - Einstellungen.pdf`
 - Release-Changelog: `Release/CHANGELOG.md`
+- Installationshinweise (automatisch je Release erstellt): `Release/INSTALLATIONSHINWEISE.html`
 - Web-Anleitung: `https://share.eu.articulate.com/d15vUSkhGBZUcTHq-gI4t`
 
 ## Kernfunktionen
@@ -21,8 +26,9 @@ Der PC-Konfigurator richtet Windows- und Office-Umgebungen automatisiert ein. Da
 - Synchronisation von `Datei-Vorlagen/` und `Fonts/`
 - Sicherung und bedarfsorientierte Rücksicherung von Outlook-Signaturen (`%APPDATA%\Microsoft\Signatures` ↔ `<Zielpfad>\Signaturen`)
 - Fallback-Logik bei Kopierproblemen (z. B. Robocopy)
-- Interaktive Auswahl von Installationsmodus und Schriftoptionen
-- Office-Anpassungen (Word, Excel, Outlook)
+- Interaktive Auswahl von Installationsmodus sowie einer von acht Schriftarten
+- Office-Anpassungen (Word, Excel, Outlook, Schnellzugriffe)
+- Synchronisation von Vorlagen für Schnellzugriffe aus `Datei-Vorlagen\Sonstiges\Symbolleiste Schnellzugriff` nach `%APPDATA%\Microsoft\Office\` (`Excel.officeUI`, `Word.officeUI`)
 - Protokollierung und Bereinigung älterer Logs
 
 ## Schnellstart

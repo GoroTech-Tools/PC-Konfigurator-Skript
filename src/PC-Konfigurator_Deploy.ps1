@@ -15,6 +15,7 @@ param(
     [string]$ChangelogFile = "CHANGELOG.md",
     [string]$HinweisDatei = "INSTALLATIONSHINWEISE.html",
     [string]$Kommentar = "Routine-Update",
+    [string]$VersionOverride,
     [switch]$SkipLint
 )
 
@@ -47,20 +48,34 @@ if (-not (Test-Path $archivPath)) {
     Write-Output "Archiv-Ordner erstellt: $archivPath"
 }
 
-# Hoechste vorhandene Version ermitteln
-$files = Get-ChildItem -Path $OutputFolder -Filter "$BaseName*.zip" -File
-$maxVersion = 0
+# Hoechste vorhandene Version ermitteln (Format: vMajor.Minor, kompatibel mit altem vMajor)
+if ($VersionOverride) {
+    $newVersion = $VersionOverride.Trim()
+} else {
+    $files = Get-ChildItem -Path $OutputFolder -Filter "$BaseName*.zip" -File
+    $latestVersion = [pscustomobject]@{ Major = 0; Minor = 0 }
 
-foreach ($f in $files) {
-    if ($f.Name -match "$BaseName-v(\d+)\.zip") {
-        $ver = [int]$matches[1]
-        if ($ver -gt $maxVersion) { $maxVersion = $ver }
+    foreach ($f in $files) {
+        if ($f.Name -match "^$([regex]::Escape($BaseName))-v(?<Major>\d+)(?:\.(?<Minor>\d+))?\.zip$") {
+            $major = [int]$matches['Major']
+            $minor = if ($matches['Minor']) { [int]$matches['Minor'] } else { 0 }
+
+            if ($major -gt $latestVersion.Major -or ($major -eq $latestVersion.Major -and $minor -gt $latestVersion.Minor)) {
+                $latestVersion = [pscustomobject]@{ Major = $major; Minor = $minor }
+            }
+        }
+    }
+
+    if ($latestVersion.Major -eq 0 -and $latestVersion.Minor -eq 0) {
+        $newVersion = "2.0"
+    } else {
+        $newVersion = "$($latestVersion.Major).$($latestVersion.Minor + 1)"
     }
 }
 
-$newVersion = $maxVersion + 1
 $ZipName = "$BaseName-v$newVersion.zip"
 $zipPath = Join-Path $OutputFolder $ZipName
+$releaseBuildDate = Get-Date -Format 'dd.MM.yyyy HH:mm'
 
 # Hilfsdateien für bestehende Release-Unterordner synchron halten
 $releaseSupportFiles = @(
@@ -102,7 +117,14 @@ $excludePaths = @(
     ".venv",
     "venv",
     ".markdownlint.json",
+    ".editorconfig",
+    "node_modules",
+    "package.json",
+    "package-lock.json",
+    "PSScriptAnalyzerSettings.psd1",
+    "PC-Konfigurator_Lint.ps1",
     "_Entwicklung",
+    "docs\*.docx",
     "*.log",
     "*.tmp",
     "pc-konfigurator.7z",
@@ -119,9 +141,13 @@ New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 # Alle Dateien kopieren (ausser ausgeschlossene)
 Get-ChildItem -Path $SourceFolder -Recurse | ForEach-Object {
     $relativePath = $_.FullName.Substring((Resolve-Path $SourceFolder).Path.Length + 1)
-    $shouldExclude = $false
+    $shouldExclude = $relativePath -like 'docs\*.docx' -or $relativePath -like 'docs/*.docx'
 
     foreach ($exclude in $excludePaths) {
+        if ($shouldExclude) {
+            break
+        }
+
         if ($relativePath -like "*$exclude*" -or $_.Name -like $exclude) {
             $shouldExclude = $true
             break
@@ -140,6 +166,17 @@ Get-ChildItem -Path $SourceFolder -Recurse | ForEach-Object {
 
 # ZIP aus dem temporaeren Verzeichnis erstellen
 Compress-Archive -Path "$tempDir\*" -DestinationPath $zipPath -Force
+
+# Release-Version und Erstelldatum in den Starter einbetten.
+$releaseStarterPath = Join-Path $tempDir 'PC-Konfigurator.bat'
+if (Test-Path -LiteralPath $releaseStarterPath -PathType Leaf) {
+    $starterContent = Get-Content -LiteralPath $releaseStarterPath -Raw
+    $starterContent = $starterContent.Replace('__RELEASE_VERSION__', "v$newVersion")
+    $starterContent = $starterContent.Replace('__RELEASE_DATE__', $releaseBuildDate)
+    Set-Content -LiteralPath $releaseStarterPath -Value $starterContent -Encoding ASCII -NoNewline
+    # ZIP nach der Einbettung neu erstellen.
+    Compress-Archive -Path "$tempDir\*" -DestinationPath $zipPath -Force
+}
 
 # Temporaeres Verzeichnis bereinigen
 Remove-Item -Path $tempDir -Recurse -Force
@@ -204,6 +241,7 @@ $hinweis = @"
         <li><a href="docs/DOKUMENTATION_ANWENDER.md">Anwenderdokumentation</a></li>
         <li><a href="docs/DOKUMENTATION_TECHNIK.md">Technische Dokumentation</a></li>
         <li><a href="docs/Registry-Einstellungen.md">Registry-Übersicht</a></li>
+        <li><a href="docs/PC-Konfigurator%20-%20Einstellungen.pdf">Detaillierte Einstellungsübersicht (PDF)</a></li>
     </ul>
 
     <p><strong>Support:</strong> Bei Problemen wenden Sie sich an Ihren IT-Administrator.</p>

@@ -23,8 +23,6 @@ if ([string]::IsNullOrWhiteSpace($AnalyzerSettingsPath)) {
 
 function Get-MarkdownLintCommand {
     $localCandidates = @(
-        (Join-Path $ProjectRoot 'node_modules\\.bin\\markdownlint-cli2.cmd'),
-        (Join-Path $ProjectRoot 'node_modules\\.bin\\markdownlint-cli2'),
         (Join-Path $PSScriptRoot 'node_modules\\.bin\\markdownlint-cli2.cmd'),
         (Join-Path $PSScriptRoot 'node_modules\\.bin\\markdownlint-cli2')
     )

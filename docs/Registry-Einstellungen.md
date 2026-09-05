@@ -10,7 +10,7 @@ Die meisten Werte werden für den **aktuellen Benutzer** unter `HKCU` gesetzt.
 ### `HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced`
 
 | Wert | Typ | Standard im Skript | Kurzbeschreibung |
-|---|---:|---:|---|
+| --- | ---: | ---: | --- |
 | `HideFileExt` | `DWord` | `0` | Dateiendungen im Explorer anzeigen. |
 | `Hidden` | `DWord` | `1` | Versteckte Dateien anzeigen. |
 | `ShowSuperHidden` | `DWord` | `1` | Geschützte Systemdateien anzeigen. |
@@ -20,17 +20,28 @@ Die meisten Werte werden für den **aktuellen Benutzer** unter `HKCU` gesetzt.
 ### `HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Search`
 
 | Wert | Typ | Standard im Skript | Kurzbeschreibung |
-|---|---:|---:|---|
+| --- | ---: | ---: | --- |
 | `SearchSystemDirs` | `DWord` | `1` | Systemverzeichnisse in die Suche einbeziehen. |
 | `SearchCompressedFiles` | `DWord` | `1` | Komprimierte Dateien in die Suche einbeziehen. |
 | `SearchAlways` | `DWord` | `1` | Immer Dateinamen und Inhalte suchen. |
+
+## Office-UI-Dateien / Schnellzugriffe
+
+### `%APPDATA%\Microsoft\Office\`
+
+| Datei | Zweck |
+| --- | --- |
+| `Excel.officeUI` | Definiert die sichtbaren Einträge der Excel-Symbolleiste für den Schnellzugriff. |
+| `Word.officeUI` | Definiert die sichtbaren Einträge der Word-Symbolleiste für den Schnellzugriff. |
+
+Diese Dateien werden aus dem Ordner `Datei-Vorlagen\Sonstiges\Symbolleiste Schnellzugriff` übernommen, sofern vorhanden. Sie stellen eine benutzerbezogene Standardkonfiguration für die Schnellzugriffsbars bereit.
 
 ## Word
 
 ### `HKCU:\Software\Microsoft\Office\16.0\Word\Options`
 
 | Wert | Typ | Standard im Skript | Kurzbeschreibung |
-|---|---:|---:|---|
+| --- | ---: | ---: | --- |
 | `DeveloperTools` | `DWord` | `1` | Entwicklertools aktivieren. |
 | `Ruler` | `DWord` | `1` | Lineal einblenden. |
 | `ShowAllFormatting` | `DWord` | `1` | Alle Formatierungszeichen anzeigen. |
@@ -55,7 +66,7 @@ Die meisten Werte werden für den **aktuellen Benutzer** unter `HKCU` gesetzt.
 Diese Werte werden zusätzlich für mehrere Word-Versionen gesetzt:
 
 | Wert | Typ | Standard im Skript | Kurzbeschreibung |
-|---|---:|---:|---|
+| --- | ---: | ---: | --- |
 | `AutoFormatAsYouTypeApplyNumberedLists` | `DWord` | `0` | Nummerierte Listen während der Eingabe deaktivieren. |
 | `AutoFormatAsYouTypeApplyBulletedLists` | `DWord` | `0` | Aufzählungslisten während der Eingabe deaktivieren. |
 | `CorrectSentenceCaps` | `DWord` | `1` | Satzanfang automatisch korrigieren. |
@@ -73,7 +84,7 @@ Diese Werte werden zusätzlich für mehrere Word-Versionen gesetzt:
 #### außerdem für die Versionen `14.0`, `15.0`, `16.0`
 
 | Wert | Typ | Standard im Skript | Kurzbeschreibung |
-|---|---:|---:|---|
+| --- | ---: | ---: | --- |
 | `DefaultFont` | `String` | z. B. `Aptos` | Standardschrift beibehalten/setzen. |
 | `DefaultFontSize` | `DWord` | z. B. `11` | Standardschriftgröße beibehalten/setzen. |
 
@@ -82,7 +93,7 @@ Diese Werte werden zusätzlich für mehrere Word-Versionen gesetzt:
 ### `HKCU:\Software\Microsoft\Office\16.0\Excel\Options`
 
 | Wert | Typ | Standard im Skript | Kurzbeschreibung |
-|---|---:|---:|---|
+| --- | ---: | ---: | --- |
 | `DeveloperTools` | `DWord` | `1` | Entwicklertools aktivieren. |
 | `DefaultPath` | `String` / `ExpandString` | `Z:\` oder `$driveRoot` | Standardpfad für Arbeitsmappen/Dateien. |
 | `PersonalTemplates` | `String` / `ExpandString` | `$BackupTargetPath` | Pfad für persönliche Vorlagen. |
@@ -96,15 +107,21 @@ Diese Werte werden zusätzlich für mehrere Word-Versionen gesetzt:
 ### `HKCU:\Software\Microsoft\Office\16.0\Excel\Options`, `15.0`, `14.0`
 
 | Wert | Typ | Standard im Skript | Kurzbeschreibung |
-|---|---:|---:|---|
+| --- | ---: | ---: | --- |
 | `StandardFont` | `String` | z. B. `Aptos` | Standardschrift für neue Arbeitsmappen. |
 | `StandardFontSize` | `DWord` | z. B. `10` | Standardschriftgröße für neue Arbeitsmappen. |
 
-### `HKCU:\Software\Microsoft\Office\16.0\Excel\Options` – Zusatz für Autokorrektur
+### `HKCU:\Software\Microsoft\Office\14.0\Excel\Options`, `15.0\Excel\Options`, `16.0\Excel\Options` – Zusatz für Autokorrektur
 
 | Wert | Typ | Standard im Skript | Kurzbeschreibung |
-|---|---:|---:|---|
+| --- | ---: | ---: | --- |
 | `CorrectSentenceCap` | `DWord` | `0` | Automatische Satzanfangskorrektur in Excel deaktivieren. |
+
+Zusätzlich setzt das Skript die dokumentierte Excel-COM-Eigenschaft
+`Application.AutoCorrect.CorrectSentenceCap` auf `False` und liest sie danach zur
+Verifikation wieder aus. Im Gegensatz zu Word ist dies die primäre Konfiguration
+für Excel; die Registry-Werte bleiben ein Fallback für noch nicht gestartete
+Excel-Instanzen.
 
 ## Outlook
 
@@ -113,13 +130,13 @@ Diese Werte werden zusätzlich für mehrere Word-Versionen gesetzt:
 > Im Skript werden die Versionen `16.0`, `15.0` und `14.0` durchlaufen.
 
 | Wert | Typ | Standard im Skript | Kurzbeschreibung |
-|---|---:|---:|---|
+| --- | ---: | ---: | --- |
 | `WeekNum` | `DWord` | `1` | Kalender zeigt Kalenderwochen an. |
 
 ### `HKCU:\Software\Microsoft\Office\$version\Outlook\Options`
 
 | Wert | Typ | Standard im Skript | Kurzbeschreibung |
-|---|---:|---:|---|
+| --- | ---: | ---: | --- |
 | `NewMailFont` | `String` | z. B. `Aptos` | Standardschrift für neue E-Mails. |
 | `NewMailFontSize` | `DWord` | z. B. `11` | Schriftgröße für neue E-Mails. |
 | `ReplyForwardFont` | `String` | z. B. `Aptos` | Standardschrift für Antworten und Weiterleitungen. |
@@ -132,3 +149,5 @@ Diese Werte werden zusätzlich für mehrere Word-Versionen gesetzt:
 - Einige Pfade werden nur gesetzt, wenn sie existieren; andere werden bei Bedarf angelegt.
 - Schriftarten und Größen können je nach Auswahl im Skript variieren.
 - Die Tabelle bildet den Stand aus `src/PC-Konfigurator.ps1` ab und kann sich mit künftigen Änderungen im Skript ändern.
+- Eine fachliche Gesamtübersicht der zusätzlich per COM, Vorlagen und Office-UI-Dateien vorgenommenen Einstellungen enthält `PC-Konfigurator - Einstellungen.pdf`.
+- Die PDF wird in Releases aufgenommen. Die zugehörige Arbeitsdatei `PC-Konfigurator - Einstellungen.docx` bleibt außerhalb des Release-Pakets.

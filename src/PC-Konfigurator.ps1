@@ -1,4 +1,77 @@
-﻿### PowerShell-Skript
+param(
+    [switch]$DryRun
+)
+
+# Einheitliche Konsolenfarben:
+# Standard/Bestätigung = Weiß, Eingabeaufforderung = Grün,
+# Eingaben/Informationen = Cyan, Fehler = Rot.
+function Write-Host {
+    [CmdletBinding()]
+    param (
+        [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
+        [object[]]$Object,
+        [ConsoleColor]$ForegroundColor,
+        [ConsoleColor]$BackgroundColor,
+        [string]$Separator,
+        [switch]$NoNewline
+    )
+
+    $mappedColor = if ($PSBoundParameters.ContainsKey('ForegroundColor')) {
+        switch ($ForegroundColor.ToString()) {
+            'Red' { [ConsoleColor]::Red }
+            'Green' { [ConsoleColor]::White }
+            'Cyan' { [ConsoleColor]::Cyan }
+            'Yellow' { [ConsoleColor]::Green }
+            default { [ConsoleColor]::White }
+        }
+    } else {
+        [ConsoleColor]::White
+    }
+
+    $nativeParameters = @{
+        Object = $Object
+        ForegroundColor = $mappedColor
+    }
+    if ($PSBoundParameters.ContainsKey('BackgroundColor')) { $nativeParameters.BackgroundColor = $BackgroundColor }
+    if ($PSBoundParameters.ContainsKey('Separator')) { $nativeParameters.Separator = $Separator }
+    if ($NoNewline) { $nativeParameters.NoNewline = $true }
+
+    Microsoft.PowerShell.Utility\Write-Host @nativeParameters
+}
+
+# 32-Bit-Office liefert nur eine Win32-Typbibliothek; ein 64-Bit-Host bricht sonst mit
+# TYPE_E_CANTLOADLIBRARY (0x80029C4A) beim ersten Office-COM-Zugriff ab.
+if ([Environment]::Is64BitProcess -and -not $env:PCK_ARCH_RELAUNCH) {
+    $wordTypeLibKey = 'Registry::HKEY_CLASSES_ROOT\TypeLib\{00020905-0000-0000-C000-000000000046}'
+    $needs32Bit = $false
+    if (Test-Path $wordTypeLibKey) {
+        foreach ($versionKey in Get-ChildItem $wordTypeLibKey -ErrorAction SilentlyContinue) {
+            $localeKey = Join-Path $versionKey.PSPath '0'
+            if (-not (Test-Path $localeKey)) { continue }
+            $platforms = (Get-ChildItem $localeKey -ErrorAction SilentlyContinue).PSChildName
+            if (($platforms -contains 'Win32') -and ($platforms -notcontains 'Win64')) {
+                $needs32Bit = $true
+            }
+        }
+    }
+
+    if ($needs32Bit) {
+        $powerShell32 = Join-Path $env:WINDIR 'SysWOW64\WindowsPowerShell\v1.0\powershell.exe'
+        if (Test-Path $powerShell32) {
+            # Aus Gründen reduzierter Ausgaben auskommentiert.
+            # Write-Host -ForegroundColor Cyan "32-Bit-Office erkannt - starte PC-Konfigurator in 32-Bit-PowerShell neu ..."
+            # Write-Host -ForegroundColor Cyan " "
+            $env:PCK_ARCH_RELAUNCH = '1'
+            $relaunchArgs = @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
+            if ($DryRun) { $relaunchArgs += '-DryRun' }
+            $process = Start-Process -FilePath $powerShell32 -ArgumentList $relaunchArgs -NoNewWindow -Wait -PassThru
+            exit $process.ExitCode
+        }
+        Write-Host -ForegroundColor Red "32-Bit-Office erkannt, aber 32-Bit-PowerShell wurde nicht gefunden. Office-COM-Zugriffe werden fehlschlagen."
+    }
+}
+
+### PowerShell-Skript
 ### Anpassungen für Windows 11 und Office-Programme
 ###
 ### In der Laufwerksauswahl (L) wird zusätzlich (für private Zwecke) das Verzeichnis Documents (D) des jeweiligen Anwendenden
@@ -12,9 +85,12 @@ $BackupTargetPath = $null
 function Confirm-OfficeClosure {
     do {
         Write-Host -ForegroundColor Yellow "Haben Sie alle Office-Dateien gespeichert und die Office-Programme Excel, Word und Outlook geschlossen? (Ja/Nein)"
+        Write-Host -ForegroundColor Yellow " "
         $response = Read-Host
         if ($response -match "^(Ja|ja|J|j)$") {
-            Write-Host -ForegroundColor Green "Bestätigung erhalten. Skript wird fortgesetzt..."
+            # Aus Gründen reduzierter Ausgaben auskommentiert.
+            # Write-Host -ForegroundColor Green "Bestätigung erhalten. Skript wird fortgesetzt..."
+            # Write-Host -ForegroundColor Green " "
             return $true
         }
         elseif ($response -match "^(Nein|nein|N|n)$") {
@@ -52,7 +128,7 @@ function Write-Log {
         Add-Content -Path $logFile -Value $entry -Encoding UTF8
     } catch {
         # Fallback auf Konsole, falls Log-Datei nicht erreichbar ist
-        Write-Host -ForegroundColor Yellow "LOGFALLBACK [$Level] $Message"
+        Write-Host -ForegroundColor Cyan "LOGFALLBACK [$Level] $Message"
     }
 }
 
@@ -68,6 +144,42 @@ function Clear-OldLogs {
                 Remove-Item -Path $file.FullName -Force
             }
         }
+    }
+}
+
+function Write-DryRunAction {
+    param(
+        [Parameter(Mandatory = $true)][string]$Message
+    )
+    Write-Host -ForegroundColor Cyan "[DRYRUN] $Message"
+    Write-Log "DRYRUN: $Message" "INFO"
+}
+
+function Assert-RegistryValue {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][object]$Expected,
+        [string]$Description = $Name
+    )
+
+    if (-not (Test-Path -Path $Path)) {
+        Write-Log "Validierung fehlgeschlagen: Pfad fehlt ($Path) beim Wert $Description" "WARN"
+        return $false
+    }
+
+    try {
+        $actual = (Get-ItemProperty -Path $Path -Name $Name -ErrorAction Stop).$Name
+        if ($actual -eq $Expected) {
+            Write-Log "Validierung OK: $Description = $actual in $Path" "INFO"
+            return $true
+        }
+
+        Write-Log "Validierung fehlgeschlagen: $Description in $Path -> erwartet '$Expected', ist '$actual'" "WARN"
+        return $false
+    } catch {
+        Write-Log "Validierung fehlgeschlagen: $Description in $Path konnte nicht gelesen werden ($($_.Exception.Message))" "WARN"
+        return $false
     }
 }
 
@@ -136,7 +248,7 @@ function Set-DesktopInQuickAccess {
 
         if (-not $helperPath) {
             Write-Log -Message 'Pin-Desktop-Schnellzugriff.ps1 wurde nicht gefunden.' -Level 'WARN'
-            Write-Host -ForegroundColor Yellow "Hilfsskript für den Desktop-Schnellzugriff wurde nicht gefunden – Prüfung übersprungen."
+            Write-Host -ForegroundColor Cyan "Hilfsskript für den Desktop-Schnellzugriff wurde nicht gefunden – Prüfung übersprungen."
             return
         }
 
@@ -159,7 +271,8 @@ function Set-DesktopInQuickAccess {
 
 if (Confirm-OfficeClosure) {
     # Hier kann das eigentliche Skript ausgeführt werden
-    Write-Host "Das Skript wird nun abgearbeitet..."
+    # Aus Gründen reduzierter Ausgaben auskommentiert.
+    # Write-Host "Das Skript wird nun abgearbeitet..."
 
     # Explorer-Optionen vorbereiten: Zuletzt verwendete Dateien & Häufig verwendete Ordner
     # Kein sofortiger Explorer-Neustart an dieser Stelle; Änderungen werden später gesammelt wirksam.
@@ -186,7 +299,7 @@ if (Confirm-OfficeClosure) {
             Add-Content -Path $logFile -Value $entry -Encoding UTF8
         } catch {
             # Fallback auf Konsole, falls Log-Datei nicht erreichbar ist
-            Write-Host -ForegroundColor Yellow "LOGFALLBACK [$Level] $Message"
+            Write-Host -ForegroundColor Cyan "LOGFALLBACK [$Level] $Message"
         }
     }
 
@@ -358,7 +471,7 @@ if (Confirm-OfficeClosure) {
     # Systemanforderungen prüfen - Skript nur fortsetzen wenn erfüllt
     if (-not (Test-SystemRequirements)) {
         Write-Host -ForegroundColor Red "Das Skript wird beendet, da die Systemanforderungen nicht erfüllt sind."
-        Write-Host -ForegroundColor Yellow "Erforderlich: Windows 10/11 und Office 2019 oder neuer"
+        Write-Host -ForegroundColor Red "Erforderlich: Windows 10/11 und Office 2019 oder neuer"
         pause
         exit
     }
@@ -366,10 +479,8 @@ if (Confirm-OfficeClosure) {
     ### Hinweise:
 
     Write-Host "   "
-    Write-Host -foregroundcolor yellow "Dieses PowerShell-Skript benötigt diverse Angaben von Ihnen:"
-    Write-Host "   "
-    Write-Host -foregroundcolor yellow "Standardlaufwerk für neue Dateien (somit auch für Datei-Vorlagen)."
-    Write-Host -foregroundcolor yellow "Standardschriftart für neue Dateien."
+    Write-Host -ForegroundColor Cyan "Dieses PowerShell-Skript benötigt diverse Angaben von Ihnen:"
+    Write-Host -ForegroundColor Cyan "Laufwerk für Vorlagen und Dateien, Schriftart für neue Dateien und Lernsituationen sowie Corporate Design."
     Write-Host "   "
     Write-Host -foregroundcolor yellow "Bitte geben Sie diese an den entsprechenden Stellen während der Ausführung des Skriptes ein."
     Write-Host "   "
@@ -504,19 +615,19 @@ if (Confirm-OfficeClosure) {
 
         foreach ($path in $sourceDirectories) {
             if (IsPathInBlacklist $path) {
-                Write-Host -foregroundcolor yellow "Die Synchronisation eines kompletten Laufwerkes ist nicht vorgesehen; es muss sich um Ordner handeln."
+                Write-Host -ForegroundColor Red "Die Synchronisation eines kompletten Laufwerkes ist nicht vorgesehen; es muss sich um Ordner handeln."
                 pause
                 exit
             } elseif (Test-Path -Path $path -PathType Leaf) {
-                Write-Host -foregroundcolor yellow "Die Synchronisation einer einzelnen Datei ist nicht vorgesehen."
+                Write-Host -ForegroundColor Red "Die Synchronisation einer einzelnen Datei ist nicht vorgesehen."
                 pause
                 exit
             } elseif ($path -eq $roboCopyBackupPath) {
-                Write-Host -foregroundcolor yellow "Quelle und Ziel sind identisch. Das ist so nicht vorgesehen"
+                Write-Host -ForegroundColor Red "Quelle und Ziel sind identisch. Das ist so nicht vorgesehen"
                 pause
                 exit
             } elseif (-not(Test-Path -Path $path)) {
-                Write-Host -foregroundcolor yellow "Der Pfad '$path' ist nicht vorhanden oder nicht erreichbar."
+                Write-Host -ForegroundColor Red "Der Pfad '$path' ist nicht vorhanden oder nicht erreichbar."
                 pause
                 exit
             }
@@ -535,8 +646,6 @@ if (Confirm-OfficeClosure) {
             $startTime = [System.Diagnostics.Stopwatch]::StartNew()
 
             $jobs = @()
-            $totalJobs = $sourceDirectories.Count
-            $completedJobs = 0
             $maxConcurrentJobs = $maxThreads
 
             foreach ($source in $sourceDirectories) {
@@ -557,7 +666,7 @@ if (Confirm-OfficeClosure) {
                 # Überprüfe ob Quelldateien existieren
                 $sourceFiles = Get-ChildItem -Path $source -Recurse -File -ErrorAction SilentlyContinue
                 if (-not $sourceFiles -or $sourceFiles.Count -eq 0) {
-                    Write-Host -ForegroundColor Yellow "WARNUNG: Quellverzeichnis ist leer: $source"
+                    Write-Host -ForegroundColor Cyan "WARNUNG: Quellverzeichnis ist leer: $source"
                     Write-Log "Quellverzeichnis ist leer: $source" "WARN"
                     continue
                 }
@@ -633,8 +742,8 @@ if (Confirm-OfficeClosure) {
                             # Verwende Anführungszeichen nur um den Log-Pfad
                             $quotedLogPath = "`"$logPath`""
 
-                            # /MIR = Mirror, /R:3 = 3 Retry attempts, /W:5 = Wait 5 seconds between retries
-                            # /TEE = Output to console and log file
+                            # /MIR = Mirror, /R:3 = 3 Retry attempts, /W:5 = Wait 5 seconds between retries.
+                            # /TEE schreibt die Ausgabe gleichzeitig in die Konsole und die UNILOG-Datei.
                             $process = Start-Process -FilePath "robocopy.exe" -ArgumentList "`"$src`" `"$dest`" /MIR /J /XJ /DCOPY:DAT /COPY:DAT /MT:8 /R:3 /W:5 /NP /V /XA:S /XF $excFile /XD $excDirectorie /TEE /UNILOG+:$quotedLogPath" -Wait -PassThru -WindowStyle Hidden
 
                             $exitCode = $process.ExitCode
@@ -660,7 +769,6 @@ if (Confirm-OfficeClosure) {
                     }
 
                     $jobs += $praktikumJob
-                    $totalJobs++  # Erhöhe die Gesamtzahl der Jobs
                 }
 
                 # Standard-Job für alle anderen Dateien (ohne Überschreibung bei neueren Zieldateien)
@@ -710,9 +818,6 @@ if (Confirm-OfficeClosure) {
             }
 
             while (($jobs | Where-Object { $_.State -ne 'Completed' }).Count -gt 0) {
-                $completedJobs = ($jobs | Where-Object { $_.State -eq 'Completed' }).Count
-                $percentComplete = ($completedJobs / $totalJobs) * 100
-                Write-Progress -Activity "Synchronisation: " -Status "$completedJobs von $totalJobs Aufgaben erledigt." -PercentComplete $percentComplete
                 Start-Sleep -Seconds 1
             }
 
@@ -722,31 +827,32 @@ if (Confirm-OfficeClosure) {
 
                 if ($exitCode -eq 0) {
                     Write-Host " "
-                    Write-Host -foregroundcolor yellow "Eine Synchronisation ist nicht erforderlich."
+                    Write-Host -ForegroundColor Green "Eine Synchronisation ist nicht erforderlich."
                     Write-Log "Eine Synchronisation ist nicht erforderlich." "INFO"
                     Write-Host " "
                 }
                 elseif ($exitCode -eq 1) {
                     Write-Host " "
-                    Write-Host -foregroundcolor yellow "Die Synchronisation wurde erfolgreich abgeschlossen."
+                    Write-Host -ForegroundColor Green "Die Synchronisation wurde erfolgreich abgeschlossen."
                     Write-Log "Die Synchronisation wurde erfolgreich abgeschlossen." "INFO"
                     Write-Host " "
                 }
                 elseif ($exitCode -eq 2) {
                     Write-Host " "
-                    Write-Host -foregroundcolor yellow "Es gibt zusätzliche Dateien im Zielverzeichnis, die nicht im Quellverzeichnis vorhanden sind. Es wurden keine neuen Dateien kopiert."
+                    # Aus Gründen der Benutzerfreundlichkeit wird hier keine Warnung ausgegeben, da dies nicht kritisch ist.
+                    # Write-Host -ForegroundColor Cyan "Es gibt zusätzliche Dateien im Zielverzeichnis, die nicht im Quellverzeichnis vorhanden sind. Es wurden keine neuen Dateien kopiert."
                     Write-Log "Es gibt zusätzliche Dateien im Zielverzeichnis, keine neuen kopiert." "INFO"
                     Write-Host " "
                 }
                 elseif ($exitCode -eq 3) {
                     Write-Host " "
-                    Write-Host -foregroundcolor yellow "Einige Dateien wurden kopiert, aber es gibt zusätzliche Dateien im Zielverzeichnis."
+                    Write-Host -ForegroundColor Cyan "Einige Dateien wurden kopiert, aber es gibt zusätzliche Dateien im Zielverzeichnis."
                     Write-Log "Einige Dateien wurden kopiert, aber es gibt zusätzliche Dateien im Zielverzeichnis." "INFO"
                     Write-Host " "
                 }
                 elseif ($exitCode -eq 16) {
                     Write-Host " "
-                    Write-Host -foregroundcolor yellow "⚠ Robocopy Fehler 16: Versuche alternativen Kopiervorgang..."
+                    Write-Host -ForegroundColor Red "⚠ Robocopy Fehler 16: Versuche alternativen Kopiervorgang..."
                     Write-Log "Robocopy Fehler 16 - starte Fallback-Kopiervorgang" "WARN"
 
                     # Fallback: Versuche manuellen Kopiervorgang SOFORT
@@ -789,15 +895,12 @@ if (Confirm-OfficeClosure) {
                 Remove-Job -Job $job
             }
 
-            Write-Progress -Activity "Synchronisation: " -Status "Alle Prozesse wurden erfolgreich abgeschlossen." -PercentComplete 100 -Completed
-
             $startTime.Stop()
             $elapsedTime = $startTime.Elapsed
             $formattedTime = "{0:D2} Stunden, {1:D2} Minuten, {2:D2} Sekunden, {3:D3} Millisekunden" -f $elapsedTime.Hours, $elapsedTime.Minutes, $elapsedTime.Seconds, $elapsedTime.Milliseconds
-            Write-Host -Foregroundcolor Yellow "`n`nZeit : $formattedTime"
             Write-Log "Synchronisation abgeschlossen. Dauer: $formattedTime" "INFO"
         } else {
-            Write-Host -Foregroundcolor Yellow "Das Laufwerk $driveLetter ist nicht vorhanden."
+            Write-Host -ForegroundColor Red "Das Laufwerk $driveLetter ist nicht vorhanden."
             Write-Log "Das Laufwerk $driveLetter ist nicht vorhanden." "ERROR"
         }
 
@@ -888,10 +991,10 @@ if (Confirm-OfficeClosure) {
     ### Initialisierung der Office-Programme
     ###
     ### Excel und Word starten und kurz danach wieder beenden. Grund: Auf manchen Rechnern sind die benötigten
-    ### Programmverzeichnisse erst nach erstmaligem Aufruf verfügbar.
+    ### Programmverzeichnisse erst nach erstmaligem Aufruf verfügbar. Outlook wird nicht gestartet, da es die
+    ### Explorer-Oberfläche unabhängig von WindowStyle sichtbar öffnen kann und hier kein Outlook-COM-Zugriff nötig ist.
 
-    Write-Host " "
-    Write-Host -foregroundcolor Red  "Bitte kurz warten. Excel und Word werden initialisiert."
+    Write-Host -ForegroundColor Cyan "Bitte kurz warten. Excel, Outlook und Word werden initialisiert."
     Write-Host " "
 
     if (-not (Get-Process WINWORD -ErrorAction SilentlyContinue)) {
@@ -904,6 +1007,7 @@ if (Confirm-OfficeClosure) {
         Start-Sleep 5
         Stop-Process -Name "EXCEL" -Force
     }
+    Write-Log "Outlook-Initialisierung übersprungen: Vorlagen und Registry-Einstellungen werden ohne gestarteten Outlook-Prozess eingerichtet." "INFO"
 
     try {
         Stop-Process -Name "OfficeClickToRun" -Force -ErrorAction Stop
@@ -990,11 +1094,13 @@ if (Confirm-OfficeClosure) {
 
     # ===== Ziel-Laufwerk für Datei-Vorlagen abfragen =====
     Write-Host -ForegroundColor Yellow  "Wohin sollen die Datei-Vorlagen kopiert werden?"
-    Write-Host -ForegroundColor Red  "Bitte wählen Sie eine der folgenden Optionen:"
-    Write-Host -ForegroundColor Green   "  [L] Laufwerk - Geben Sie anschließend den Laufwerksbuchstaben ein (z. B. D)"
-    Write-Host -ForegroundColor Green   "  [D] Dokumente - Verwenden Sie Ihr persönliches Dokumente-Verzeichnis"
-    Write-Host -ForegroundColor Green "  Hinweis: Im BFW verwenden Sie bitte Laufwerk Z (Option L, dann Z)."
-
+    Write-Host -ForegroundColor Yellow "Bitte wählen Sie eine der folgenden Optionen:"
+    Write-Host -ForegroundColor Yellow " "
+    Write-Host -ForegroundColor Cyan "  [L] Laufwerk - Geben Sie anschließend den Laufwerksbuchstaben ein (z. B. Z)"
+    Write-Host -ForegroundColor Cyan "  [D] Dokumente - Verwenden Sie Ihr persönliches Dokumente-Verzeichnis"
+    Write-Host -ForegroundColor Cyan " "
+    Write-Host -ForegroundColor Cyan "  Hinweis: Im BFW verwenden Sie bitte Laufwerk Z (Option L, dann Z)."
+    Write-Host -ForegroundColor Cyan " "
     do {
         $choice = Read-Host "Ihre Auswahl (L/D)"
         if ($choice -match '^[LlDd]$') {
@@ -1039,7 +1145,8 @@ if (Confirm-OfficeClosure) {
     # Zielpfad für die Sync-Funktion global setzen
     $BackupTargetPath = $targetTemplatePath
 
-    Write-Host -foregroundcolor Yellow "⏳ Schritt 1/7: Outlook-Signaturen werden synchronisiert..."
+    Write-Host -ForegroundColor Cyan "⏳ Schritt 1/7: Outlook-Signaturen werden synchronisiert..."
+    Write-Host -ForegroundColor Cyan " "
     # Outlook-Signaturen sichern bzw. bei Bedarf zurückkopieren
     Sync-OutlookSignatures -BaseTargetPath $BackupTargetPath
     Write-Host -foregroundcolor Green "  ✓ Schritt 1/7 abgeschlossen: Outlook-Signaturen wurden geprüft und bei Bedarf synchronisiert."
@@ -1091,7 +1198,7 @@ if (Confirm-OfficeClosure) {
             $windowsSettings = @{
                 "HideFileExt" = 0
                 "Hidden" = 1
-                "ShowSuperHidden" = 1
+                "ShowSuperHidden" = 0
             }
         )
 
@@ -1154,6 +1261,211 @@ if (Confirm-OfficeClosure) {
     # Aufruf bewusst später (nach Benutzerauswahl),
     # damit FontName/FontSize nicht leer bzw. 0 sind.
 
+    # === ERKENNUNG / KONFIGURATION DER EXCEL-QUICK-ACCESS-TOOLBAR ===
+    function Get-ExcelQuickAccessToolbarTargets {
+        param (
+            [string[]]$OfficeVersions = @('16.0', '15.0', '14.0')
+        )
+
+        $targets = @()
+
+        foreach ($version in $OfficeVersions) {
+            $candidatePaths = @(
+                "HKCU:\Software\Microsoft\Office\$version\Excel\QAT",
+                "HKCU:\Software\Microsoft\Office\$version\Excel\Ribbon",
+                "HKCU:\Software\Microsoft\Office\$version\Excel\Options"
+            )
+
+            foreach ($candidatePath in $candidatePaths) {
+                $targets += [pscustomobject]@{
+                    Version = $version
+                    Path = $candidatePath
+                    Exists = Test-Path $candidatePath
+                    Strategy = if ($candidatePath -match '\\Excel\\QAT$') { 'QAT' }
+                        elseif ($candidatePath -match '\\Excel\\Ribbon$') { 'Ribbon' }
+                        else { 'Options' }
+                }
+            }
+        }
+
+        # Office speichert die benutzerspezifische QAT-Konfiguration unter LocalAppData.
+        # Der Roaming-Pfad kann zwar ebenfalls eine .officeUI-Datei enthalten, wird von
+        # aktuellen Excel-/Word-Versionen jedoch nicht als aktive QAT-Datei verwendet.
+        $userAppData = [Environment]::GetFolderPath('LocalApplicationData')
+        $uiFileCandidates = @(
+            (Join-Path $userAppData 'Microsoft\Office\Excel.officeUI'),
+            (Join-Path $userAppData 'Microsoft\Office\excel.officeUI'),
+            (Join-Path $userAppData 'Microsoft\Excel\Excel16.xlb'),
+            (Join-Path $userAppData 'Microsoft\Excel\Excel15.xlb'),
+            (Join-Path $userAppData 'Microsoft\Excel\Excel14.xlb')
+        )
+
+        foreach ($uiFile in $uiFileCandidates) {
+            if ($uiFile) {
+                $targets += [pscustomobject]@{
+                    Version = 'FileSystem'
+                    Path = $uiFile
+                    Exists = Test-Path $uiFile
+                    Strategy = 'OfficeUI'
+                }
+            }
+        }
+
+        $preferredTarget = $targets | Where-Object { $_.Exists -and $_.Strategy -eq 'QAT' } | Select-Object -First 1
+        if (-not $preferredTarget) {
+            $preferredTarget = $targets | Where-Object { $_.Exists } | Select-Object -First 1
+        }
+
+        return [pscustomobject]@{
+            AvailableTargets = $targets
+            PreferredTarget = $preferredTarget
+            PreferredStrategy = if ($preferredTarget) { $preferredTarget.Strategy } else { 'NotFound' }
+        }
+    }
+
+    function Install-SelectedOfficeTheme {
+        param (
+            [Parameter(Mandatory = $true)][string]$FontName,
+            [Parameter(Mandatory = $true)][ValidateSet('INN-tegrativ', 'DBK', 'Careli')][string]$Design
+        )
+
+        $designFolders = @{
+            'INN-tegrativ' = 'Designs_INN-tegrativ'
+            'DBK' = 'Designs_DBK'
+            'Careli' = 'Designs_Careli'
+        }
+        $designPrefixes = @{
+            'INN-tegrativ' = 'Design_INN-tegrativ-'
+            'DBK' = 'Design_DBK-'
+            'Careli' = 'Design_Careli-'
+        }
+
+        $themeFileName = "$($designPrefixes[$Design])$FontName.thmx"
+
+        $sourceCandidates = @(
+            (Join-Path $PSScriptRoot "..\Datei-Vorlagen\Sonstiges\$($designFolders[$Design])\$themeFileName"),
+            (Join-Path (Split-Path $PSScriptRoot -Parent) "Datei-Vorlagen\Sonstiges\$($designFolders[$Design])\$themeFileName")
+        ) | Select-Object -Unique
+        $sourcePath = $sourceCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+
+        if (-not $sourcePath) {
+            Write-Log "Office-Theme nicht gefunden: $themeFileName" "WARN"
+            return $null
+        }
+
+        $themeTargets = @(
+            (Join-Path $env:APPDATA 'Microsoft\Templates\Document Themes'),
+            (Join-Path $env:LOCALAPPDATA 'Microsoft\Office\Themes')
+        )
+
+        foreach ($themeTarget in $themeTargets) {
+            try {
+                New-Item -ItemType Directory -Path $themeTarget -Force | Out-Null
+                $targetPath = Join-Path $themeTarget $themeFileName
+                Copy-Item -LiteralPath $sourcePath -Destination $targetPath -Force
+                Write-Log "Office-Theme kopiert: $sourcePath -> $targetPath" "INFO"
+            } catch {
+                Write-Log "Office-Theme konnte nicht kopiert werden nach $themeTarget`: $($_.Exception.Message)" "WARN"
+            }
+        }
+
+        return (Resolve-Path -LiteralPath $sourcePath).Path
+    }
+
+    function Sync-OfficeQuickAccessToolbarTemplates {
+        $templateCandidates = @(
+            (Join-Path $PSScriptRoot '..\Datei-Vorlagen\Sonstiges\Symbolleiste Schnellzugriff'),
+            (Join-Path (Split-Path $PSScriptRoot -Parent) 'Datei-Vorlagen\Sonstiges\Symbolleiste Schnellzugriff'),
+            (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'Datei-Vorlagen\Sonstiges\Symbolleiste Schnellzugriff')
+        ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+
+        $templateRoot = $templateCandidates |
+            Where-Object { Test-Path -LiteralPath $_ -PathType Container } |
+            Select-Object -First 1
+
+        if (-not $templateRoot) {
+            Write-Log "Keine Vorlagen für Schnellzugriffe im Ordner 'Datei-Vorlagen\Sonstiges\Symbolleiste Schnellzugriff' gefunden." "INFO"
+            return $false
+        }
+
+        # .officeUI-Dateien werden von Office unter LocalAppData eingelesen.
+        $officeUserRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Microsoft\Office'
+        New-Item -ItemType Directory -Path $officeUserRoot -Force | Out-Null
+
+        $copiedFiles = @()
+        foreach ($fileName in @('Excel.officeUI', 'Word.officeUI')) {
+            $sourcePath = Join-Path $templateRoot $fileName
+            $targetPath = Join-Path $officeUserRoot $fileName
+
+            if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+                Write-Log "Vorlage für Schnellzugriffe nicht gefunden: $sourcePath" "INFO"
+                continue
+            }
+
+            Copy-Item -LiteralPath $sourcePath -Destination $targetPath -Force
+            $copiedFiles += $fileName
+            Write-Log "Vorlage für Schnellzugriffe kopiert: $sourcePath -> $targetPath" "INFO"
+        }
+
+        if ($copiedFiles.Count -gt 0) {
+            Write-Log "Vorlagen für Schnellzugriffe wurden in den Office-Benutzerpfad kopiert: $($copiedFiles -join ', ')" "INFO"
+            return $true
+        }
+
+        return $false
+    }
+
+    function Set-ExcelQuickAccessToolbar {
+        param (
+            [ValidateSet('Standard', 'Seitenansicht', 'Drucken')]
+            [string]$Layout = 'Standard',
+            [string[]]$OfficeVersions = @('16.0', '15.0', '14.0')
+        )
+
+        $layoutCommands = @{
+            'Standard' = @('FileSave', 'Undo', 'Redo', 'ViewPageLayoutView', 'PrintPreviewAndPrint')
+            'Seitenansicht' = @('ViewPageLayoutView', 'FileSave', 'Undo', 'Redo', 'PrintPreviewAndPrint')
+            'Drucken' = @('PrintPreviewAndPrint', 'FileSave', 'Undo', 'Redo', 'ViewPageLayoutView')
+        }
+
+        $analysis = Get-ExcelQuickAccessToolbarTargets -OfficeVersions $OfficeVersions
+        $commands = $layoutCommands[$Layout]
+
+        $targetPath = if ($analysis.PreferredTarget -and $analysis.PreferredTarget.Path) {
+            $analysis.PreferredTarget.Path
+        } else {
+            "HKCU:\Software\Microsoft\Office\16.0\Excel\QAT"
+        }
+
+        if ($targetPath -match '^HKCU:') {
+            if (-not (Test-Path $targetPath)) {
+                New-Item -Path $targetPath -Force | Out-Null
+            }
+
+            for ($index = 0; $index -lt $commands.Count; $index++) {
+                $propertyName = "Command$($index + 1)"
+                try {
+                    Set-ItemProperty -Path $targetPath -Name $propertyName -Value $commands[$index] -Type String -Force -ErrorAction Stop
+                    Write-Log "Excel-QAT gesetzt in $targetPath : $propertyName = $($commands[$index])" "INFO"
+                } catch {
+                    Write-Log "Excel-QAT konnte in $targetPath nicht gesetzt werden ($propertyName): $($_.Exception.Message)" "WARN"
+                }
+            }
+        } else {
+            Write-Log "Excel-QAT-Konfiguration wurde erkannt, aber kein passender Registry-Ordner gefunden. Fallback-Strategie: $($analysis.PreferredStrategy); Zielpfad: $targetPath" "INFO"
+        }
+
+        Write-Log "Excel-QAT-Strategie: $($analysis.PreferredStrategy); Layout: $Layout; Ziel: $targetPath" "INFO"
+
+        return [pscustomobject]@{
+            Layout = $Layout
+            Commands = $commands
+            TargetPath = $targetPath
+            PreferredStrategy = $analysis.PreferredStrategy
+            AvailableTargets = $analysis.AvailableTargets
+        }
+    }
+
     # === ZUSÄTZLICHE REGISTRY-EINSTELLUNGEN FÜR SCHRIFTARTEN ===
     function Set-FontRegistrySettings {
         param (
@@ -1203,6 +1515,63 @@ if (Confirm-OfficeClosure) {
 
     # Aufruf bewusst später (nach Benutzerauswahl),
     # damit FontName/FontSize nicht leer bzw. 0 sind.
+
+    function Test-WordComAvailability {
+        $result = [pscustomobject]@{
+            IsAvailable = $false
+            Version = $null
+            Path = $null
+            Error = $null
+            OfficeInstallRoot = $null
+        }
+
+        $candidatePaths = @(
+            "${env:ProgramFiles}\Microsoft Office\root\Office16\WINWORD.EXE",
+            "${env:ProgramFiles(x86)}\Microsoft Office\root\Office16\WINWORD.EXE",
+            "${env:ProgramFiles}\Microsoft Office\Office16\WINWORD.EXE",
+            "${env:ProgramFiles(x86)}\Microsoft Office\Office16\WINWORD.EXE",
+            "${env:ProgramFiles}\Microsoft Office\root\Office15\WINWORD.EXE",
+            "${env:ProgramFiles(x86)}\Microsoft Office\root\Office15\WINWORD.EXE"
+        ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+        foreach ($candidatePath in $candidatePaths) {
+            if (Test-Path -LiteralPath $candidatePath) {
+                $result.OfficeInstallRoot = Split-Path -Path $candidatePath -Parent
+                break
+            }
+        }
+
+        try {
+            $word = New-Object -ComObject Word.Application -ErrorAction Stop
+            if ($null -ne $word) {
+                $result.Version = $word.Version
+                $result.Path = $word.Path
+                try {
+                    $word.Visible = $false
+                    $result.IsAvailable = $true
+                } catch {
+                    $result.Error = $_.Exception.Message
+                    $result.IsAvailable = $false
+                } finally {
+                    try {
+                        $word.Quit()
+                        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($word) | Out-Null
+                    } catch {
+                        $null = $_
+                    }
+                }
+            }
+        } catch {
+            $result.Error = $_.Exception.Message
+            $result.IsAvailable = $false
+        }
+
+        if (-not $result.IsAvailable -and -not $result.Error) {
+            $result.Error = 'Word COM-Objekt konnte nicht initialisiert werden.'
+        }
+
+        return $result
+    }
 
     # Auto-Korrektureinstellungen für Word
     function Set-WordAutoCorrectRegistry {
@@ -1256,6 +1625,12 @@ if (Confirm-OfficeClosure) {
         try {
             Write-Log "Starte Word für COM-basierte Autokorrektur-Konfiguration..." "INFO"
 
+            $wordAvailability = Test-WordComAvailability
+            if (-not $wordAvailability.IsAvailable) {
+                Write-Log "Word-COM-Initialisierung fehlgeschlagen; Autokorrektur-Konfiguration wird übersprungen. Ursache: $($wordAvailability.Error)" "WARN"
+                return
+            }
+
             # Word COM-Objekt erstellen
             $word = New-Object -ComObject Word.Application -ErrorAction Stop
             $word.Visible = $false
@@ -1277,7 +1652,7 @@ if (Confirm-OfficeClosure) {
                 $autoCorrect.CorrectInitialCaps = $false
                 Write-Log "Anfangsbuchstaben-Korrektur deaktiviert: $($autoCorrect.CorrectInitialCaps)" "INFO"
 
-                $autoCorrect.CorrectSentenceCaps = $true
+                $autoCorrect.CorrectSentenceCaps = $false
                 Write-Log "Satzanfang-Korrektur aktiviert: $($autoCorrect.CorrectSentenceCaps)" "INFO"
 
                 $autoCorrect.AutoFormatAsYouTypeReplaceQuotes = $true
@@ -1360,17 +1735,61 @@ if (Confirm-OfficeClosure) {
             }
         )
 
-        # Registry-Pfade für Excel
-        $regPathExcelHKCU = "HKCU:\Software\Microsoft\Office\16.0\Excel\Options"
+        # Die Registry dient als Fallback für noch nicht gestartete Excel-Instanzen.
+        # Der wirksame Wert wird anschließend über Excel.Application.AutoCorrect gesetzt.
+        $regPaths = @(
+            "HKCU:\Software\Microsoft\Office\16.0\Excel\Options",
+            "HKCU:\Software\Microsoft\Office\15.0\Excel\Options",
+            "HKCU:\Software\Microsoft\Office\14.0\Excel\Options"
+        )
 
-        # Einstellungen unter HKCU setzen
-        if (Test-Path $regPathExcelHKCU) {
-            foreach ($key in $autoCorrectExcelSettings.Keys) {
-                Set-ItemProperty -Path $regPathExcelHKCU -Name $key -Value $autoCorrectExcelSettings[$key] -Type DWord
-                Write-Log "Gesetzt in $regPathExcelHKCU : $key = $($autoCorrectExcelSettings[$key])" "INFO"
+        $settingsApplied = 0
+        foreach ($regPath in $regPaths) {
+            if (-not (Test-Path $regPath)) {
+                continue
             }
-        } else {
-            Write-Log  "Pfad nicht gefunden: $regPathExcelHKCU" "ERROR"
+
+            foreach ($key in $autoCorrectExcelSettings.Keys) {
+                try {
+                    Set-ItemProperty -Path $regPath -Name $key -Value $autoCorrectExcelSettings[$key] -Type DWord -Force -ErrorAction Stop
+                    Write-Log "Gesetzt in $regPath : $key = $($autoCorrectExcelSettings[$key])" "INFO"
+                    $settingsApplied++
+                } catch {
+                    Write-Log "Fehler beim Setzen von $key in ${regPath}: $($_.Exception.Message)" "WARN"
+                }
+            }
+        }
+
+        if ($settingsApplied -eq 0) {
+            Write-Log "Kein Excel-Registry-Pfad für die Autokorrektur gefunden." "WARN"
+        }
+
+        $excel = $null
+        try {
+            Write-Log "Starte Excel für die COM-basierte Autokorrektur-Konfiguration..." "INFO"
+            $excel = New-Object -ComObject Excel.Application -ErrorAction Stop
+            $excel.Visible = $false
+            $excel.DisplayAlerts = $false
+            $excel.AutoCorrect.CorrectSentenceCap = $false
+
+            if ($excel.AutoCorrect.CorrectSentenceCap -eq $false) {
+                Write-Log "Excel-Autokorrektur verifiziert: CorrectSentenceCap = False" "INFO"
+            } else {
+                Write-Log "Excel-Autokorrektur konnte nicht verifiziert werden: CorrectSentenceCap ist weiterhin aktiviert." "WARN"
+            }
+        } catch {
+            Write-Log "Excel-COM-Autokorrektur konnte nicht gesetzt werden: $($_.Exception.Message)" "WARN"
+        } finally {
+            if ($excel) {
+                try {
+                    $excel.Quit()
+                    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
+                } catch {
+                    Write-Log "Excel-COM-Objekt konnte nicht vollständig beendet werden: $($_.Exception.Message)" "WARN"
+                }
+            }
+            [GC]::Collect()
+            [GC]::WaitForPendingFinalizers()
         }
 
         Write-Log "Autokorrektureinstellungen für Excel wurden für den aktuellen Benutzer verarbeitet." "INFO"
@@ -1421,17 +1840,34 @@ if (Confirm-OfficeClosure) {
             "SearchCompressedFiles" = 1  # Komprimierte Dateien einbeziehen
             "SearchAlways"          = 1  # Immer Dateinamen und -inhalte suchen
         }
+
+        if ($DryRun) {
+            foreach ($key in $settings.Keys) {
+                Write-DryRunAction "Explorer-Suchoption: $key = $($settings[$key]) in $regPath"
+            }
+            return $true
+        }
+
         if (-not (Test-Path $regPath)) {
             New-Item -Path $regPath -Force | Out-Null
         }
+
+        $allValid = $true
         foreach ($key in $settings.Keys) {
             try {
                 Set-ItemProperty -Path $regPath -Name $key -Value $settings[$key] -Type DWord -Force
                 Write-Log "Explorer-Suchoption gesetzt: $key = $($settings[$key])" "INFO"
+
+                if (-not (Assert-RegistryValue -Path $regPath -Name $key -Expected $settings[$key] -Description "Explorer-Suchoption $key")) {
+                    $allValid = $false
+                }
             } catch {
                 Write-Log ("Fehler beim Setzen von $key in " + $regPath + ": " + $_.Exception.Message) "WARN"
+                $allValid = $false
             }
         }
+
+        return $allValid
     }
     Set-ExplorerSearchOptions
     function Set-OutlookRegistry {
@@ -1446,29 +1882,110 @@ if (Confirm-OfficeClosure) {
         if ([string]::IsNullOrWhiteSpace($FontName)) { $FontName = "Aptos" }
         if ($FontSize -lt 1) { $FontSize = 11 }
 
+        function Set-OutlookMailSettingsFonts {
+            param (
+                [Parameter(Mandatory = $true)][string]$Path,
+                [Parameter(Mandatory = $true)][string]$FontName,
+                [Parameter(Mandatory = $true)][int]$FontSize
+            )
+
+            if (-not (Test-Path $Path)) {
+                New-Item -Path $Path -Force | Out-Null
+            }
+
+            # Outlook speichert die wirksamen Schriftdefinitionen als REG_BINARY.
+            # TextFontComplex/ReplyFontComplex enthalten UTF-8-HTML mit CSS.
+            foreach ($name in @('TextFontComplex', 'ReplyFontComplex')) {
+                $existingComplex = (Get-ItemProperty -Path $Path -Name $name -ErrorAction SilentlyContinue).$name
+                if ($existingComplex -is [byte[]] -and $existingComplex.Length -gt 0) {
+                    $complexFont = [System.Text.Encoding]::UTF8.GetString($existingComplex)
+                    $complexFont = [regex]::Replace($complexFont, 'font-size:\s*[\d.]+pt', "font-size:$($FontSize).0pt")
+                    $complexFont = [regex]::Replace($complexFont, 'font-family:\s*"[^"]+"', "font-family:`"$FontName`"")
+                } else {
+                    $complexFont = "<html>`r`n<style>`r`n p.MsoPlainText, li.MsoPlainText, div.MsoPlainText { font-size:$($FontSize).0pt; font-family:`"$FontName`",sans-serif; }`r`n</style>`r`n</html>`r`n"
+                }
+                $complexBytes = [System.Text.Encoding]::UTF8.GetBytes($complexFont)
+                Set-ItemProperty -Path $Path -Name $name -Value $complexBytes -Type Binary -Force
+                Write-Log "Outlook-MailSettings aktualisiert: $name = $FontName / $FontSize pt" "INFO"
+            }
+
+            # Die Simple-Werte enthalten eine serialisierte Fontdefinition. Wenn
+            # Outlook bereits eine solche Definition besitzt, wird nur der Name im
+            # vorhandenen Blob ersetzt; unbekannte Binärfelder bleiben unverändert.
+            foreach ($name in @('TextFontSimple', 'ReplyFontSimple')) {
+                $existing = (Get-ItemProperty -Path $Path -Name $name -ErrorAction SilentlyContinue).$name
+                if ($existing -is [byte[]] -and $existing.Length -gt 0) {
+                    $bytes = [byte[]]$existing.Clone()
+                    $ascii = [System.Text.Encoding]::ASCII
+                    $text = $ascii.GetString($bytes)
+                    if ($text -match '"[^"]+"') {
+                        $replacement = '"' + $FontName + '"'
+                        $replacementBytes = $ascii.GetBytes($replacement)
+                        $matchStart = $text.IndexOf('"')
+                        $matchEnd = $text.IndexOf('"', $matchStart + 1)
+                        $fieldLength = $matchEnd - $matchStart + 1
+                        if ($replacementBytes.Length -le $fieldLength) {
+                            [Array]::Clear($bytes, $matchStart, $fieldLength)
+                            [Array]::Copy($replacementBytes, 0, $bytes, $matchStart, $replacementBytes.Length)
+                            Set-ItemProperty -Path $Path -Name $name -Value $bytes -Type Binary -Force
+                            Write-Log "Outlook-MailSettings aktualisiert: $name = $FontName" "INFO"
+                        } else {
+                            Write-Log "Outlook-MailSettings $name nicht geändert: Fontname ist für den vorhandenen Binärbereich zu lang." "WARN"
+                        }
+                    }
+                }
+            }
+        }
+
         $officeVersions = @("16.0", "15.0", "14.0")
         foreach ($version in $officeVersions) {
             # 1) Kalender-Einstellungen
             $regPathOutlookCalendarHKCU = "HKCU:\Software\Microsoft\Office\$version\Outlook\Options\Calendar"
-            if (-not (Test-Path $regPathOutlookCalendarHKCU)) {
-                New-Item -Path $regPathOutlookCalendarHKCU -Force | Out-Null
-            }
-            foreach ($key in $OutlookCalendarSettings.Keys) {
-                Set-ItemProperty -Path $regPathOutlookCalendarHKCU -Name $key -Value $OutlookCalendarSettings[$key] -Type DWord -Force
-                Write-Log "Gesetzt in $regPathOutlookCalendarHKCU : $key = $($OutlookCalendarSettings[$key])" "INFO"
+            if ($DryRun) {
+                foreach ($key in $OutlookCalendarSettings.Keys) {
+                    Write-DryRunAction "Outlook-Kalender: $key = $($OutlookCalendarSettings[$key]) in $regPathOutlookCalendarHKCU"
+                }
+            } else {
+                if (-not (Test-Path $regPathOutlookCalendarHKCU)) {
+                    New-Item -Path $regPathOutlookCalendarHKCU -Force | Out-Null
+                }
+                foreach ($key in $OutlookCalendarSettings.Keys) {
+                    Set-ItemProperty -Path $regPathOutlookCalendarHKCU -Name $key -Value $OutlookCalendarSettings[$key] -Type DWord -Force
+                    Write-Log "Gesetzt in $regPathOutlookCalendarHKCU : $key = $($OutlookCalendarSettings[$key])" "INFO"
+                    $null = Assert-RegistryValue -Path $regPathOutlookCalendarHKCU -Name $key -Expected $OutlookCalendarSettings[$key] -Description "Outlook Kalender $key"
+                }
             }
 
             # 2) Schrift-Einstellungen für neue Mails/Antworten
             $regPathOutlookOptionsHKCU = "HKCU:\Software\Microsoft\Office\$version\Outlook\Options"
+            if ($DryRun) {
+                Write-DryRunAction "Outlook-Schrift: NewMailFont = $FontName / NewMailFontSize = $FontSize in $regPathOutlookOptionsHKCU"
+                Write-DryRunAction "Outlook-Schrift: ReplyForwardFont = $FontName / ReplyForwardFontSize = $FontSize in $regPathOutlookOptionsHKCU"
+                Write-DryRunAction "Outlook-Schrift: DefaultMailFont = $FontName in $regPathOutlookOptionsHKCU"
+                continue
+            }
+
             if (-not (Test-Path $regPathOutlookOptionsHKCU)) {
                 New-Item -Path $regPathOutlookOptionsHKCU -Force | Out-Null
             }
 
-            Set-ItemProperty -Path $regPathOutlookOptionsHKCU -Name "NewMailFont" -Value $FontName -Type String -Force
-            Set-ItemProperty -Path $regPathOutlookOptionsHKCU -Name "NewMailFontSize" -Value $FontSize -Type DWord -Force
-            Set-ItemProperty -Path $regPathOutlookOptionsHKCU -Name "ReplyForwardFont" -Value $FontName -Type String -Force
-            Set-ItemProperty -Path $regPathOutlookOptionsHKCU -Name "ReplyForwardFontSize" -Value $FontSize -Type DWord -Force
-            Set-ItemProperty -Path $regPathOutlookOptionsHKCU -Name "DefaultMailFont" -Value $FontName -Type String -Force
+            $fontSettings = @{
+                "NewMailFont" = $FontName
+                "NewMailFontSize" = [int]$FontSize
+                "ReplyForwardFont" = $FontName
+                "ReplyForwardFontSize" = [int]$FontSize
+                "DefaultMailFont" = $FontName
+            }
+
+            foreach ($entry in $fontSettings.GetEnumerator()) {
+                $regType = if ($entry.Key -match "Size$") { "DWord" } else { "String" }
+                Set-ItemProperty -Path $regPathOutlookOptionsHKCU -Name $entry.Key -Value $entry.Value -Type $regType -Force
+                Write-Log "Outlook-Schrift gesetzt in $regPathOutlookOptionsHKCU : $($entry.Key) = $($entry.Value)" "INFO"
+                $null = Assert-RegistryValue -Path $regPathOutlookOptionsHKCU -Name $entry.Key -Expected $entry.Value -Description "Outlook Schrift $($entry.Key)"
+            }
+
+            $mailSettingsPath = "HKCU:\Software\Microsoft\Office\$version\Common\MailSettings"
+            Set-OutlookMailSettingsFonts -Path $mailSettingsPath -FontName $FontName -FontSize $FontSize
 
             Write-Log "Outlook-Schrift gesetzt in $regPathOutlookOptionsHKCU : $FontName / $FontSize pt" "INFO"
         }
@@ -1481,7 +1998,7 @@ if (Confirm-OfficeClosure) {
 
     # Erfolgsmeldungen
     Write-Host "   "
-    Write-Host -foregroundcolor yellow "Die empfohlenen Anpassungen für Ihre Arbeitsumgebung wurden erfolgreich vorgenommen."
+    Write-Host -ForegroundColor Green "Die empfohlenen Anpassungen für Ihre Arbeitsumgebung wurden erfolgreich vorgenommen."
     Write-Host "   "
 
     ### Optional: Word und Excel neu starten, damit die Änderungen wirksam werden
@@ -1574,40 +2091,63 @@ if (Confirm-OfficeClosure) {
     # Funktion aufrufen
     Install-UserFonts
 
+    # Benutzerabfrage: Auswahl des Corporate Designs
+    Write-Host -ForegroundColor Yellow "Welches Corporate Design soll verwendet werden?"
+    Write-Host -foregroundcolor Yellow " "
+    Write-Host -ForegroundColor Cyan "1. INN-tegrativ gGmbH (Standard; diverse Farben)"
+    Write-Host -ForegroundColor Cyan "2. Duisdorfer BüroKonzept KG (Ausarbeitungen von Lernsituationen; vorwiegend Blautöne)"
+    Write-Host -ForegroundColor Cyan "3. Careli GmbH (Ausarbeitung von Lernsituationen, vorwiegend Rottöne)"
+    Write-Host -foregroundcolor Yellow " "
+     do {
+        $designChoice = Read-Host "Ihre Auswahl (1-3)"
+        switch ($designChoice) {
+            "1" { $selectedDesign = 'INN-tegrativ'; $isValidDesign = $true }
+            "2" { $selectedDesign = 'DBK'; $isValidDesign = $true }
+            "3" { $selectedDesign = 'Careli'; $isValidDesign = $true }
+            default {
+                Write-Host -ForegroundColor Red "Ungültige Eingabe. Bitte wählen Sie 1, 2 oder 3."
+                $isValidDesign = $false
+            }
+        }
+    } until ($isValidDesign)
+    Write-Log "Gewähltes Corporate Design: $selectedDesign" "INFO"
+
     # Benutzerabfrage: Auswahl der Schriftart
     # Bestätigungsabfrage für Schriftart- und Schriftgrößenauswahl
         # --- NEU: Bestätigungsabfrage für Schriftart und Schriftgrößen ---
         # Nur wenn der Anwender dies bestätigt, werden die drei Auswahlfunktionen ausgeführt.
         # Andernfalls werden Standardwerte gesetzt und die Auswahl übersprungen.
-    Write-Host -ForegroundColor Cyan "Möchten Sie Schriftart und Schriftgrößen individuell auswählen? (Ja/Nein)"
+    Write-Host -foregroundcolor Cyan " "
+    Write-Host -ForegroundColor Yellow "Möchten Sie Schriftart und Schriftgrößen individuell auswählen? (Ja/Nein)"
+    Write-Host -ForegroundColor Yellow "Sollten Sie dies ablehnen, werden die Standardwerte Aptos (11pt für Word/Outlook, 10pt für Excel) verwendet."
     $fontConfirm = Read-Host
     if ($fontConfirm -match "^(Ja|ja|J|j|Y|y)$") {
         # Schriftart-Auswahl
-        Write-Host -foregroundcolor Red "Bitte wählen Sie die gewünschte Schriftart für neue Office-Dateien:"
+        Write-Host -ForegroundColor Yellow "Bitte wählen Sie die gewünschte Schriftart für neue Office-Dateien:"
         Write-Host "   "
-        Write-Host -foregroundcolor Yellow "1. Arial"
-        Write-Host -foregroundcolor Yellow "2. Calibri"
-        Write-Host -foregroundcolor Yellow "3. Segoe UI"
-        Write-Host -foregroundcolor Yellow "4. PT Sans"
-        Write-Host -foregroundcolor Yellow "5. Aptos"
-        Write-Host -foregroundcolor Yellow "6. Futura"
-        Write-Host -foregroundcolor Yellow "7. Aptos Narrow"
-        Write-Host -foregroundcolor Yellow "8. Futura (Cyrillic Demi)"
+        Write-Host -ForegroundColor Cyan "1. Aptos (Windows-Standard)"
+        Write-Host -ForegroundColor Cyan "2. Aptos Narrow (speziell)"
+        Write-Host -ForegroundColor Cyan "3. Arial (veraltet, jedoch AP 1-Vorgabe)"
+        Write-Host -ForegroundColor Cyan "4. Calibri (veralteter Windows-Standard)"
+        Write-Host -ForegroundColor Cyan "5. Futura (speziell)"
+        Write-Host -ForegroundColor Cyan "6. PT Sans (INN-tegrativ-Standard)"
+        Write-Host -ForegroundColor Cyan "7. Roboto (speziell)"
+        Write-Host -ForegroundColor Cyan "8. Segoe UI (speziell)"
         Write-Host -foregroundcolor Yellow "   "
         Write-Host "   "
-        Write-Host -foregroundcolor Red "Geben Sie die Nummer der gewünschten Schriftart an."
+        Write-Host -ForegroundColor Yellow "Geben Sie die Nummer der gewünschten Schriftart an."
         Write-Host "   "
         do {
             $choiceFont = Read-Host
             switch ($choiceFont) {
-                "1" { $FontName = "Arial"; $isValidFont = $true }
-                "2" { $FontName = "Calibri"; $isValidFont = $true }
-                "3" { $FontName = "Segoe UI"; $isValidFont = $true }
-                "4" { $FontName = "PT Sans"; $isValidFont = $true }
-                "5" { $FontName = "Aptos"; $isValidFont = $true }
-                "6" { $FontName = "Futura"; $isValidFont = $true }
-                "7" { $FontName = "Aptos Narrow"; $isValidFont = $true }
-                "8" { $FontName = "Futura"; $isValidFont = $true }  # Für FuturaCyrillicDemi verwenden wir "Futura"
+                "1" { $FontName = "Aptos"; $isValidFont = $true }
+                "2" { $FontName = "Aptos Narrow"; $isValidFont = $true }
+                "3" { $FontName = "Arial"; $isValidFont = $true }
+                "4" { $FontName = "Calibri"; $isValidFont = $true }
+                "5" { $FontName = "Futura"; $isValidFont = $true }
+                "6" { $FontName = "PT Sans"; $isValidFont = $true }
+                "7" { $FontName = "Roboto"; $isValidFont = $true }
+                "8" { $FontName = "Segoe UI"; $isValidFont = $true }
                 default {
                     Write-Host -foregroundcolor Red "Ungültige Eingabe. Bitte wählen Sie eine Nummer zwischen 1 und 8."
                     $isValidFont = $false
@@ -1615,24 +2155,19 @@ if (Confirm-OfficeClosure) {
             }
         } until ($isValidFont)
 
-        # Spezielle Font-Name-Behandlung für bessere Kompatibilität
         $ActualFontName = $FontName
-        if ($FontName -eq "Aptos Narrow") {
-            $PossibleNames = @("Aptos Narrow", "AptosNarrow", "Aptos-Narrow")
-            Write-Log "Teste mögliche Font-Namen für Aptos Narrow: $($PossibleNames -join ', ')" "INFO"
-            $ActualFontName = "Aptos Narrow"
-        }
         Write-Log "Gewählte Schriftart: $FontName (Verwendet: $ActualFontName)" "INFO"
 
         # Schriftgröße Word/Outlook
-        Write-Host -foregroundcolor Red "Bitte wählen Sie die gewünschte Schriftgröße für Word und Outlook:"
+        Write-Host -ForegroundColor Yellow "Bitte wählen Sie die gewünschte Schriftgröße für Word und Outlook:"
+        Write-Host -ForegroundColor Yellow "Empfehlung: 11 Punkte (Nummer 2) für Word/Outlook."
         Write-Host "   "
-        Write-Host -foregroundcolor Yellow "1. 10 Punkte"
-        Write-Host -foregroundcolor Yellow "2. 11 Punkte"
-        Write-Host -foregroundcolor Yellow "3. 12 Punkte"
+        Write-Host -ForegroundColor Cyan "1. 10 Punkte"
+        Write-Host -ForegroundColor Cyan "2. 11 Punkte"
+        Write-Host -ForegroundColor Cyan "3. 12 Punkte"
         Write-Host -foregroundcolor Yellow "   "
         Write-Host "   "
-        Write-Host -foregroundcolor Red "Geben Sie die Nummer der gewünschten Schriftgröße für Word/Outlook an."
+        Write-Host -ForegroundColor Yellow "Geben Sie die Nummer der gewünschten Schriftgröße für Word/Outlook an."
         Write-Host "   "
         do {
             $choiceSizeWord = Read-Host
@@ -1649,14 +2184,15 @@ if (Confirm-OfficeClosure) {
         Write-Log "Gewählte Schriftgröße für Word/Outlook: $FontSizeWord Punkte" "INFO"
 
         # Schriftgröße Excel
-        Write-Host -foregroundcolor Red "Bitte wählen Sie die gewünschte Schriftgröße für Excel:"
+        Write-Host -ForegroundColor Yellow "Bitte wählen Sie die gewünschte Schriftgröße für Excel:"
+        Write-Host -ForegroundColor Yellow "Empfehlung: 10 Punkte (Nummer 1) für Excel."
         Write-Host "   "
-        Write-Host -foregroundcolor Yellow "1. 10 Punkte"
-        Write-Host -foregroundcolor Yellow "2. 11 Punkte"
-        Write-Host -foregroundcolor Yellow "3. 12 Punkte"
+        Write-Host -ForegroundColor Cyan "1. 10 Punkte"
+        Write-Host -ForegroundColor Cyan "2. 11 Punkte"
+        Write-Host -ForegroundColor Cyan "3. 12 Punkte"
         Write-Host -foregroundcolor Yellow "   "
         Write-Host "   "
-        Write-Host -foregroundcolor Red "Geben Sie die Nummer der gewünschten Schriftgröße für Excel an."
+        Write-Host -ForegroundColor Yellow "Geben Sie die Nummer der gewünschten Schriftgröße für Excel an."
         Write-Host "   "
         do {
             $choiceSizeExcel = Read-Host
@@ -1672,7 +2208,8 @@ if (Confirm-OfficeClosure) {
         } until ($isValidSizeExcel)
         Write-Log "Gewählte Schriftgröße für Excel: $FontSizeExcel Punkte" "INFO"
     } else {
-        Write-Host -ForegroundColor Yellow "Schriftart- und Schriftgrößenauswahl übersprungen. Es werden Standardwerte verwendet."
+        Write-Host -ForegroundColor Cyan "Schriftart- und Schriftgrößenauswahl übersprungen. Es werden Standardwerte verwendet."
+        Write-Host -ForegroundColor Cyan "Schriftart: Aptos, Word/Outlook: 11 Punkte, Excel: 10 Punkte."
         $FontName = "Aptos"
         $ActualFontName = $FontName
         $FontSizeWord = 11
@@ -1683,20 +2220,148 @@ if (Confirm-OfficeClosure) {
     Write-Log "Gewählte Schriftgröße für Excel: $FontSizeExcel Punkte" "INFO"
 
     # Erst jetzt sind die finalen (gewählten oder Standard-)Werte zuverlässig vorhanden.
+    $selectedOfficeThemePath = Install-SelectedOfficeTheme -FontName $ActualFontName -Design $selectedDesign
     Set-OfficeRegistrySettings -FontName $ActualFontName -FontSizeWord $FontSizeWord -FontSizeExcel $FontSizeExcel
+    $templateSyncResult = Sync-OfficeQuickAccessToolbarTemplates
+    if ($templateSyncResult) {
+        Write-Log "Vorlagen für Schnellzugriffe aus 'Datei-Vorlagen\Sonstiges\Symbolleiste Schnellzugriff' wurden übernommen." "INFO"
+        Write-Host -ForeGroundColor Cyan " "
+        Write-Host -ForeGroundColor Cyan "Symbolleisten für den Schnellzugriff für Excel und Word wurden erfolgreich übernommen."
+    }
+    $excelQatConfig = Set-ExcelQuickAccessToolbar -Layout 'Standard'
+    Write-Log "Excel-QAT wurde mit Layout '$($excelQatConfig.Layout)' konfiguriert. Strategie: $($excelQatConfig.PreferredStrategy), Ziel: $($excelQatConfig.TargetPath)" "INFO"
     Set-FontRegistrySettings -FontName $ActualFontName -FontSizeWord $FontSizeWord -FontSizeExcel $FontSizeExcel
 
     # Outlook bekommt bewusst die gleichen Werte wie Word
+
+	Get-Process OUTLOOK -ErrorAction SilentlyContinue |
+    Stop-Process -Force -ErrorAction SilentlyContinue
+
+	Start-Sleep -Seconds 2
+
     Set-OutlookRegistry -FontName $ActualFontName -FontSize $FontSizeWord
     Write-Log "Outlook-Schrift wurde mit Word synchronisiert: $ActualFontName / $FontSizeWord pt" "INFO"
 
     # === OFFICE-KONFIGURATION STARTEN ===
     Write-Host ""
-    Write-Host -foregroundcolor Yellow "Starte Office-Konfiguration..."
+    Write-Host -ForegroundColor Cyan "Starte Office-Konfiguration..."
     Write-Host -foregroundcolor Cyan "Dies kann 1-2 Minuten dauern. Bitte haben Sie Geduld."
     Write-Host ""
 
     # --- Funktionen zum Anpassen der Office-Vorlagen ---
+
+    function Set-WordDocumentTheme {
+        param (
+            [Parameter(Mandatory = $true)]$Document,
+            [string]$ThemePath
+        )
+
+        if ([string]::IsNullOrWhiteSpace($ThemePath) -or -not (Test-Path -LiteralPath $ThemePath -PathType Leaf)) {
+            return $false
+        }
+
+        try {
+            $Document.ApplyTheme($ThemePath)
+            Write-Log "Word-Theme eingebettet: $ThemePath" "INFO"
+            return $true
+        } catch {
+            Write-Log "Word-Theme konnte nicht eingebettet werden: $($_.Exception.Message)" "WARN"
+            return $false
+        }
+    }
+
+    function Set-ExcelWorkbookTheme {
+        param (
+            [Parameter(Mandatory = $true)]$Workbook,
+            [string]$ThemePath
+        )
+
+        if ([string]::IsNullOrWhiteSpace($ThemePath) -or -not (Test-Path -LiteralPath $ThemePath -PathType Leaf)) {
+            return $false
+        }
+
+        try {
+            $Workbook.ApplyTheme($ThemePath)
+            Write-Log "Excel-Theme eingebettet: $ThemePath" "INFO"
+            return $true
+        } catch {
+            Write-Log "Excel-Theme konnte nicht eingebettet werden: $($_.Exception.Message)" "WARN"
+            return $false
+        }
+    }
+
+    function Set-OutlookTemplateTheme {
+        param (
+            [Parameter(Mandatory = $true)][string]$ThemePath
+        )
+
+        $templatePath = Join-Path $env:APPDATA 'Microsoft\Templates\NormalEmail.dotm'
+        if (-not (Test-Path -LiteralPath $templatePath -PathType Leaf)) {
+            Write-Log "NormalEmail.dotm für Theme-Anpassung nicht gefunden: $templatePath" "WARN"
+            return
+        }
+
+        $word = $null
+        $template = $null
+        try {
+            Get-Process WINWORD -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            $word = New-Object -ComObject Word.Application -ErrorAction Stop
+            $word.Visible = $false
+            $template = $word.Documents.Open($templatePath, $false, $false)
+            [void](Set-WordDocumentTheme -Document $template -ThemePath $ThemePath)
+            $template.Save()
+            $template.Close($false)
+            Write-Log "Outlook-Theme in NormalEmail.dotm übernommen." "INFO"
+        } catch {
+            Write-Log "Outlook-Theme konnte nicht in NormalEmail.dotm übernommen werden: $($_.Exception.Message)" "WARN"
+            if ($template) { try { $template.Close($false) } catch { $null = $_.Exception.Message } }
+        } finally {
+            if ($word) {
+                try { $word.Quit() } catch { $null = $_.Exception.Message }
+                try { [System.Runtime.Interopservices.Marshal]::ReleaseComObject($word) | Out-Null } catch { $null = $_.Exception.Message }
+            }
+            [GC]::Collect()
+            [GC]::WaitForPendingFinalizers()
+        }
+    }
+
+    function Set-WordHeadingStyles {
+        param (
+            [Parameter(Mandatory = $true)]$Styles,
+            [string]$FontName = "Aptos"
+        )
+
+        # Word-interne Style-IDs funktionieren unabhängig von der Word-Sprache.
+        $headingStyles = @(
+            @{ Id = -2; Name = 'Überschrift 1'; Size = 16; BottomBorder = $true },
+            @{ Id = -3; Name = 'Überschrift 2'; Size = 14; BottomBorder = $true },
+            @{ Id = -4; Name = 'Überschrift 3'; Size = 12; BottomBorder = $false },
+            @{ Id = -5; Name = 'Überschrift 4'; Size = 11; BottomBorder = $false }
+        )
+
+        foreach ($heading in $headingStyles) {
+            try {
+                $style = $Styles.Item($heading.Id)
+                $style.Font.Name = $FontName
+                $style.Font.Size = $heading.Size
+                $style.Font.Color = 0 # wdColorBlack
+
+                # Vorhandene Rahmen vollständig zurücksetzen.
+                $style.Borders.Enable = $false
+                if ($heading.BottomBorder) {
+                    $bottomBorder = $style.Borders.Item(3) # wdBorderBottom
+                    $bottomBorder.LineStyle = 1 # wdLineStyleSingle
+                    $bottomBorder.LineWidth = 4 # wdLineWidth050pt
+                    $bottomBorder.Color = 0 # wdColorBlack
+                    $bottomBorder.Visible = $true
+                }
+
+                Write-Log "$($heading.Name) angepasst: $($heading.Size) pt, Schwarz, untere Linie = $($heading.BottomBorder)" "INFO"
+            } catch {
+                Write-Log "$($heading.Name) konnte nicht angepasst werden: $($_.Exception.Message)" "WARN"
+            }
+        }
+    }
 
     function Set-WordCustomizer {
         param (
@@ -1745,6 +2410,7 @@ if (Confirm-OfficeClosure) {
                 }
 
                 $wordtemplate = $word.Documents.Open($wordtemplatePath, $false, $false)
+                [void](Set-WordDocumentTheme -Document $wordtemplate -ThemePath $selectedOfficeThemePath)
                 $standardStyle = $wordtemplate.Styles.Item("Standard")
                 $standardStyle.ParagraphFormat.SpaceAfter = 0
                 $wordtemplate.DefaultTabStop = 1.0 * 28.35
@@ -1814,7 +2480,7 @@ if (Confirm-OfficeClosure) {
             }
         } catch {
             Write-Log "Fehler beim Setzen der Standard-Schriftart über COM: $($_.Exception.Message)" "WARN"
-            Write-Host -ForegroundColor Yellow "  ⚠ Word-Optionen konnten nicht gesetzt werden"
+            Write-Host -ForegroundColor Cyan "  ⚠ Word-Optionen konnten nicht gesetzt werden"
         }
 
         # 2a. Zusätzliche Methode: Selection-Default setzen
@@ -1917,7 +2583,7 @@ if (Confirm-OfficeClosure) {
             Write-Log "Word COM-Objekt erfolgreich gestartet." "INFO"
         } catch {
             Write-Log "Fehler beim Starten von Word COM-Objekt: $($_.Exception.Message)" "ERROR"
-            Write-Host -ForegroundColor Red "Word konnte nicht gestartet werden – COM-Fehler."
+            Write-Host -ForegroundColor Red "⚠ Anpassung von Word-Lernsituationen übersprungen: Word konnte nicht gestartet werden - COM-Fehler."
             return
         }
 
@@ -1936,6 +2602,7 @@ if (Confirm-OfficeClosure) {
                 $word.Quit()
                 return
             }
+            [void](Set-WordDocumentTheme -Document $wordtemplate -ThemePath $selectedOfficeThemePath)
             $standardStyle = $wordtemplate.Styles.Item("Standard")
             $standardStyle.ParagraphFormat.SpaceAfter = 0
             $wordtemplate.DefaultTabStop = 1.0 * 28.35
@@ -1943,6 +2610,7 @@ if (Confirm-OfficeClosure) {
             $standardStyle.Font.Size = $FontSize
             $standardStyle.ParagraphFormat.LineSpacingRule = 3  # wdLineSpaceMultiple
             $standardStyle.ParagraphFormat.LineSpacing = 1.1   # 1.1-fach
+            Set-WordHeadingStyles -Styles $wordtemplate.Styles -FontName $FontName
             $wordtemplate.Save()
             $wordtemplate.Close($false)
             Write-Log "Die Lernsituationen DBK.dotx wurde erfolgreich angepasst." "INFO"
@@ -1990,6 +2658,7 @@ if (Confirm-OfficeClosure) {
             if (Test-Path $excelTemplatePath) {
                 try {
                     $workbook = $excel.Workbooks.Open($excelTemplatePath, $null, $false)
+                    [void](Set-ExcelWorkbookTheme -Workbook $workbook -ThemePath $selectedOfficeThemePath)
 
                     # Normal-Style anpassen
                     $style = $workbook.Styles.Item("Normal")
@@ -2015,6 +2684,7 @@ if (Confirm-OfficeClosure) {
             # 3. Neue leere Arbeitsmappe erstellen und als Vorlage speichern
             try {
                 $newWorkbook = $excel.Workbooks.Add()
+                [void](Set-ExcelWorkbookTheme -Workbook $newWorkbook -ThemePath $selectedOfficeThemePath)
 
                 # Standard-Style für neue Arbeitsmappe setzen
                 $normalStyle = $newWorkbook.Styles.Item("Normal")
@@ -2057,7 +2727,8 @@ if (Confirm-OfficeClosure) {
     }
 
     # Aufruf der Funktionen NACH der Schriftart- und Schriftgrößen-Auswahl
-    Write-Host -foregroundcolor Yellow "⏳ Schritt 2/7: Word-Vorlagen werden angepasst..."
+    Write-Host -ForegroundColor Cyan "⏳ Schritt 2/7: Word-Vorlagen werden angepasst..."
+    Write-Host -ForegroundColor Cyan " "
     try {
         # Vereinfachte Word Normal.dotm Anpassung mit Timeout-Schutz
 
@@ -2066,6 +2737,14 @@ if (Confirm-OfficeClosure) {
         Start-Sleep -Seconds 1
 
         try {
+            $wordAvailability = Test-WordComAvailability
+            if (-not $wordAvailability.IsAvailable) {
+                $userFriendlyWordError = 'Word konnte nicht gestartet werden - COM-Fehler.'
+                Write-Host -ForegroundColor Cyan "  ⚠ Word-Konfiguration übersprungen: $userFriendlyWordError"
+                Write-Log "Word-Konfiguration übersprungen: $userFriendlyWordError" "WARN"
+                throw [System.Exception]::new($userFriendlyWordError)
+            }
+
             $word = New-Object -ComObject Word.Application
             $word.Visible = $false
             $word.DisplayAlerts = 0
@@ -2073,6 +2752,7 @@ if (Confirm-OfficeClosure) {
             # Öffne Normal.dotm direkt
             $normalPath = $word.NormalTemplate.FullName
             $normalTemplate = $word.Documents.Open($normalPath)
+            [void](Set-WordDocumentTheme -Document $normalTemplate -ThemePath $selectedOfficeThemePath)
 
             # Ändere Standard-Style
             $standardStyle = $normalTemplate.Styles.Item("Standard")
@@ -2080,6 +2760,7 @@ if (Confirm-OfficeClosure) {
             $standardStyle.Font.Size = $FontSizeWord
             $standardStyle.ParagraphFormat.SpaceAfter = 0
             $standardStyle.ParagraphFormat.LineSpacing = 12
+            Set-WordHeadingStyles -Styles $normalTemplate.Styles -FontName $ActualFontName
 
             # Speichere und schließe
             $normalTemplate.Save()
@@ -2093,8 +2774,9 @@ if (Confirm-OfficeClosure) {
 
 
         } catch {
-            Write-Host -ForegroundColor Yellow "  ⚠ Word-Konfiguration übersprungen: $($_.Exception.Message)"
-            Write-Log "Word-Konfiguration übersprungen: $($_.Exception.Message)" "WARN"
+            $userFriendlyWordError = 'Word konnte nicht gestartet werden - COM-Fehler.'
+            Write-Host -ForegroundColor Cyan "  ⚠ Word-Konfiguration übersprungen: $userFriendlyWordError"
+            Write-Log "Word-Konfiguration übersprungen: $userFriendlyWordError" "WARN"
         }
 
     } catch {
@@ -2103,20 +2785,28 @@ if (Confirm-OfficeClosure) {
     }
     Write-Host -foregroundcolor Green "  ✓ Schritt 2/7 abgeschlossen: Word-Vorlagen wurden verarbeitet."
 
-    Write-Host -foregroundcolor Yellow "⏳ Schritt 3/7: Word-Lernsituationen werden angepasst..."
+    Write-Host -ForegroundColor Cyan "⏳ Schritt 3/7: Word-Lernsituationen werden angepasst..."
+    Write-Host -ForegroundColor Cyan " "
     Set-WordLernsituationenCustomizer -FontName $ActualFontName -FontSize $FontSizeWord
     Write-Host -foregroundcolor Green "  ✓ Schritt 3/7 abgeschlossen: Word-Lernsituationen wurden verarbeitet."
 
-    Write-Host -foregroundcolor Yellow "⏳ Schritt 4/7: Excel-Vorlagen werden angepasst..."
+    Write-Host -ForegroundColor Cyan "⏳ Schritt 4/7: Excel-Vorlagen werden angepasst..."
+    Write-Host -ForegroundColor Cyan " "
     Set-ExcelCustomizer -FontName $ActualFontName -FontSize $FontSizeExcel
     Write-Host -foregroundcolor Green "  ✓ Schritt 4/7 abgeschlossen: Excel-Vorlagen wurden verarbeitet."
 
-    Write-Host -foregroundcolor Yellow "⏳ Schritt 5/7: Registry-Einstellungen werden gesetzt..."
+    if ($selectedOfficeThemePath) {
+        Set-OutlookTemplateTheme -ThemePath $selectedOfficeThemePath
+    }
+
+    Write-Host -ForegroundColor Cyan "⏳ Schritt 5/7: Registry-Einstellungen werden gesetzt..."
+    Write-Host -ForegroundColor Cyan " "
     # Aufruf der Auto-Korrektureinstellungen
     Set-WordAutoCorrectRegistry
     Write-Host -foregroundcolor Green "  ✓ Schritt 5/7 abgeschlossen: Registry-Einstellungen wurden verarbeitet."
 
-    Write-Host -foregroundcolor Yellow "⏳ Schritt 6/7: Windows-Einstellungen werden angepasst..."
+    Write-Host -ForegroundColor Cyan "⏳ Schritt 6/7: Windows-Einstellungen werden angepasst..."
+    Write-Host -ForegroundColor Cyan " "
 
     # Windows 11 - Taskleisteneinstellungen anpassen
     function Set-TaskbarSettings {
@@ -2176,6 +2866,7 @@ if (Confirm-OfficeClosure) {
             # Zusätzlich aus Referenzstand: Widgets ausblenden + Startmenü-Sichtbarkeit
             [void](Set-RegistryDwordSafe -Path $taskbarRegistryPath -Name "TaskbarDa" -Value 0)
             [void](Set-RegistryDwordSafe -Path $taskbarRegistryPath -Name "Start_Layout" -Value 1)
+            # Meistverwendete Apps anzeigen/Verfolgung der meistverwendeten Programme aktivieren
             [void](Set-RegistryDwordSafe -Path $taskbarRegistryPath -Name "Start_TrackProgs" -Value 1)
             [void](Set-RegistryDwordSafe -Path $taskbarRegistryPath -Name "Start_TrackDocs" -Value 1)
             [void](Set-RegistryDwordSafe -Path $taskbarRegistryPath -Name "Start_ShowDocuments" -Value 1)
@@ -2212,7 +2903,6 @@ if (Confirm-OfficeClosure) {
 
             # Speichere alle geöffneten Explorer-Fenster mit ihren spezifischen Pfaden
             $openWindows = @()
-            $scriptDirWindowFound = $false
 
             try {
                 $shell = New-Object -ComObject Shell.Application
@@ -2248,12 +2938,6 @@ if (Confirm-OfficeClosure) {
                                 }
                             }
 
-                            # Prüfe ob es sich um das Skript-Verzeichnis handelt
-                            if ($currentPath -and $currentPath -eq $scriptDirectory) {
-                                $scriptDirWindowFound = $true
-                                Write-Log "Skript-Verzeichnis-Fenster gefunden: $currentPath" "INFO"
-                            }
-
                             # Nur gültige, zugängliche Pfade speichern (keine Computer-Views)
                             if ($currentPath -and $currentPath -ne "" -and (Test-Path $currentPath -ErrorAction SilentlyContinue)) {
                                 # Doppelte Pfade vermeiden
@@ -2272,23 +2956,17 @@ if (Confirm-OfficeClosure) {
                 Write-Log "Fehler beim Speichern der Explorer-Fenster: $($_.Exception.Message)" "WARN"
             }
 
-            # Falls das Skript-Verzeichnis nicht in den offenen Fenstern war, füge es hinzu
-            if (-not $scriptDirWindowFound -and $scriptDirectory -and (Test-Path $scriptDirectory)) {
-                $openWindows += $scriptDirectory
-                Write-Log "Skript-Verzeichnis zur Wiederherstellung hinzugefügt: $scriptDirectory" "INFO"
-            }
-
             Write-Log "Stoppe Windows-Explorer ($(($openWindows).Count) Fenster gespeichert)" "INFO"
 
             # Stoppe den Windows-Explorer
-            Write-Host -foregroundcolor Yellow "Stoppe Windows-Explorer..."
+            Write-Host -ForegroundColor Cyan "Stoppe Datei-Explorer..."
             Stop-Process -Name "explorer" -Force
 
             # Reduzierte Wartezeit
             Start-Sleep -Seconds 1
 
             # Starte den Windows-Explorer neu (nur Shell, kein Fenster)
-            Write-Host -foregroundcolor Yellow "Starte Windows-Explorer neu..."
+            Write-Host -ForegroundColor Cyan "Starte Datei-Explorer neu..."
             Start-Process "explorer.exe" -WindowStyle Hidden
 
             # Reduzierte Wartezeit bis Explorer-Shell geladen ist
@@ -2299,7 +2977,7 @@ if (Confirm-OfficeClosure) {
                 $newWindows = Get-Process -Name "explorer" -ErrorAction SilentlyContinue
                 if ($newWindows) {
                     # Warte kurz und schließe dann alle Explorer-Fenster
-                    Write-Host -foregroundcolor Yellow "Schließe automatisch geöffnete Fenster..."
+                    Write-Host -ForegroundColor Cyan "Schließe automatisch geöffnete Fenster..."
                     Start-Sleep -Milliseconds 500
 
                     # Verwende COM um nur die Fenster zu schließen, nicht die Shell
@@ -2332,7 +3010,7 @@ if (Confirm-OfficeClosure) {
             # Stelle die gespeicherten Fenster wieder her
             if ($openWindows.Count -gt 0) {
                 Write-Log "Stelle $($openWindows.Count) Explorer-Fenster wieder her" "INFO"
-                Write-Host -foregroundcolor Yellow "Stelle Explorer-Fenster wieder her..."
+                Write-Host -ForegroundColor Cyan "Stelle zuvor geöffnete Fenster des Datei-Explorers wieder her..."
 
                 foreach ($path in $openWindows) {
                     try {
@@ -2349,7 +3027,7 @@ if (Confirm-OfficeClosure) {
                     }
                 }
 
-                Write-Host -foregroundcolor Green "Explorer-Fenster-Wiederherstellung abgeschlossen"
+                Write-Host -foregroundcolor Green "Wiederherstellung der Fenster des Datei-Explorersabgeschlossen"
                 Write-Log "Explorer-Fenster-Wiederherstellung abgeschlossen" "INFO"
             } else {
                 Write-Log "Keine Explorer-Fenster zum Wiederherstellen gefunden" "INFO"
@@ -2360,9 +3038,64 @@ if (Confirm-OfficeClosure) {
         }
     }
 
+    Write-Host -foregroundcolor Green "  ✓ Schritt 6/7 abgeschlossen: Windows-Einstellungen wurden verarbeitet."
+
+    Write-Host "   "
+    Write-Host -ForegroundColor Cyan "⏳ Schritt 7/7: Verknüpfung für 'Kontaktdaten DBK.xlsx'wird erstellt..."
+    Write-Host -ForegroundColor Cyan " "
+
+    # --- Shortcut für Kontaktdaten DBK.xlsx im Benutzer-Ordner erstellen ---
+    $step7Succeeded = $false
+    try {
+        # Quellpfad der Excel-Datei (bevorzugt: benutzerspezifisches Datei-Vorlagen-Verzeichnis)
+        $sourceFile = Join-Path $BackupTargetPath 'Duisdorfer BüroKonzept KG\Datenquellen\Kontaktdaten DBK.xlsx'
+        if (-not (Test-Path $sourceFile)) {
+            $fallbackSource = Join-Path $PSScriptRoot 'Datei-Vorlagen\Duisdorfer BüroKonzept KG\Datenquellen\Kontaktdaten DBK.xlsx'
+            if (Test-Path $fallbackSource) {
+                Write-Log "Kontaktdaten DBK.xlsx nicht im benutzerspezifischen Vorlagenpfad gefunden. Fallback auf Skriptpfad wird verwendet." "WARN"
+                $sourceFile = $fallbackSource
+            } else {
+                throw "Kontaktdaten DBK.xlsx wurde weder im benutzerspezifischen Vorlagenpfad noch im Skriptpfad gefunden."
+            }
+        }
+        # Zielordner: immer aktueller Dokumente-Ordner (auch OneDrive)
+        $documentsPath = [Environment]::GetFolderPath('MyDocuments')
+        $targetDir = Join-Path $documentsPath 'Meine Datenquellen'
+        # Name und Pfad der Verknüpfung
+        $shortcutPath = Join-Path $targetDir 'Kontaktdaten DBK.lnk'
+
+        # Zielordner anlegen, falls nicht vorhanden
+        if (-not (Test-Path $targetDir)) {
+            New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+        }
+
+        # WScript.Shell-Objekt für Shortcut-Erstellung
+        $wshShell = New-Object -ComObject WScript.Shell
+        $shortcut = $wshShell.CreateShortcut($shortcutPath)
+        $shortcut.TargetPath = $sourceFile
+        $shortcut.WorkingDirectory = Split-Path $sourceFile
+        $shortcut.WindowStyle = 1
+        $shortcut.Description = 'Kontaktdaten Duisdorfer BüroKonzept KG'
+        $shortcut.Save()
+        $step7Succeeded = $true
+        Write-Host -ForegroundColor Green "  Verknüpfung zu 'Kontaktdaten DBK.xlsx' wurde in '$targetDir' erstellt."
+    } catch {
+        Write-Host -ForegroundColor Red "Fehler beim Erstellen der Verknüpfung: $($_.Exception.Message)"
+    }
+
+    if ($step7Succeeded) {
+        Write-Host -foregroundcolor Green "  ✓ Schritt 7/7 abgeschlossen: Verknüpfung wurde erstellt."
+    } else {
+        Write-Host -ForegroundColor Cyan "  ⚠ Schritt 7/7 abgeschlossen mit Hinweis: Verknüpfung konnte nicht erstellt werden."
+    }
+
+    Write-Host "   "
     # Benutzerabfrage: Explorer-Neustart
+    Write-Host -foregroundcolor Yellow "Eine gegebenenfalls auftretende Meldung für COM-Fehler ist nicht kritisch; sie kann ignoriert werden, da die wichtigsten Anpassungen bereits erfolgreich durchgeführt wurden."
+    Write-Host -foregroundcolor Yellow " "
     Write-Host -foregroundcolor Yellow "Möchten Sie den Windows-Explorer neustarten, um die Taskleisten-Änderungen sofort anzuwenden?"
-    Write-Host -foregroundcolor Yellow "(Dies kann 30-60 Sekunden dauern, ist aber optional)"
+    Write-Host -ForegroundColor Yellow "(Dies kann 30-60 Sekunden dauern, ist aber optional)"
+    Write-Host -foregroundcolor Yellow " "
     Write-Host -foregroundcolor Cyan "[J] Ja - Explorer neustarten (empfohlen)"
     Write-Host -foregroundcolor Cyan "[N] Nein - Änderungen werden beim nächsten Neustart aktiv"
     Write-Host "   "
@@ -2384,66 +3117,13 @@ if (Confirm-OfficeClosure) {
     } until ($isValidExplorerChoice)
 
     if ($restartExplorer) {
-        Write-Host -foregroundcolor Yellow "Starte Explorer-Neustart..."
+        Write-Host -ForegroundColor Cyan "Starte den Datei-Explorer neu ..."
         # Funktion aufrufen, um den Windows-Explorer neu zu starten
         Restart-ExplorerIfRunning
     } else {
-        Write-Host -foregroundcolor Green "Explorer-Neustart übersprungen. Änderungen werden beim nächsten Windows-Neustart aktiv."
+        Write-Host -ForegroundColor Cyan "Explorer-Neustart übersprungen. Änderungen werden beim nächsten Windows-Neustart aktiv."
         Write-Log "Explorer-Neustart vom Benutzer übersprungen" "INFO"
     }
-    Write-Host -foregroundcolor Green "  ✓ Schritt 6/7 abgeschlossen: Windows-Einstellungen wurden verarbeitet."
-
-
-    Write-Host "   "
-    Write-Host -foregroundcolor Yellow "Der PC-Konfigurator hat Ihren Rechner konfiguriert und schließt sich in fünf Sekunden.."
-    Start-Sleep -Seconds 5
-
-    Write-Host -foregroundcolor Yellow "⏳ Schritt 7/7: Verknüpfung wird erstellt..."
-
-# --- Shortcut für Kontaktdaten DBK.xlsx im Benutzer-Ordner erstellen ---
-$step7Succeeded = $false
-try {
-    # Quellpfad der Excel-Datei (bevorzugt: benutzerspezifisches Datei-Vorlagen-Verzeichnis)
-    $sourceFile = Join-Path $BackupTargetPath 'Duisdorfer BüroKonzept KG\Datenquellen\Kontaktdaten DBK.xlsx'
-    if (-not (Test-Path $sourceFile)) {
-        $fallbackSource = Join-Path $PSScriptRoot 'Datei-Vorlagen\Duisdorfer BüroKonzept KG\Datenquellen\Kontaktdaten DBK.xlsx'
-        if (Test-Path $fallbackSource) {
-            Write-Log "Kontaktdaten DBK.xlsx nicht im benutzerspezifischen Vorlagenpfad gefunden. Fallback auf Skriptpfad wird verwendet." "WARN"
-            $sourceFile = $fallbackSource
-        } else {
-            throw "Kontaktdaten DBK.xlsx wurde weder im benutzerspezifischen Vorlagenpfad noch im Skriptpfad gefunden."
-        }
-    }
-    # Zielordner: immer aktueller Dokumente-Ordner (auch OneDrive)
-    $documentsPath = [Environment]::GetFolderPath('MyDocuments')
-    $targetDir = Join-Path $documentsPath 'Meine Datenquellen'
-    # Name und Pfad der Verknüpfung
-    $shortcutPath = Join-Path $targetDir 'Kontaktdaten DBK.lnk'
-
-    # Zielordner anlegen, falls nicht vorhanden
-    if (-not (Test-Path $targetDir)) {
-        New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
-    }
-
-    # WScript.Shell-Objekt für Shortcut-Erstellung
-    $wshShell = New-Object -ComObject WScript.Shell
-    $shortcut = $wshShell.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath = $sourceFile
-    $shortcut.WorkingDirectory = Split-Path $sourceFile
-    $shortcut.WindowStyle = 1
-    $shortcut.Description = 'Kontaktdaten Duisdorfer BüroKonzept KG'
-    $shortcut.Save()
-    $step7Succeeded = $true
-    Write-Host -ForegroundColor Green "Verknüpfung zu 'Kontaktdaten DBK.xlsx' wurde in '$targetDir' erstellt."
-} catch {
-    Write-Host -ForegroundColor Red "Fehler beim Erstellen der Verknüpfung: $($_.Exception.Message)"
-}
-
-if ($step7Succeeded) {
-    Write-Host -foregroundcolor Green "  ✓ Schritt 7/7 abgeschlossen: Verknüpfung wurde erstellt."
-} else {
-    Write-Host -foregroundcolor Yellow "  ⚠ Schritt 7/7 abgeschlossen mit Hinweis: Verknüpfung konnte nicht erstellt werden."
-}
 
 function Remove-PraktikumOrdnerBenutzer {
     $benutzerVorlagenPfad = $BackupTargetPath
@@ -2460,6 +3140,11 @@ function Remove-PraktikumOrdnerBenutzer {
 
     # Am Ende: Praktikum-Ordner im Benutzer-Vorlagenverzeichnis entfernen
     Remove-PraktikumOrdnerBenutzer
+
+    Write-Host "   "
+    Write-Host -ForegroundColor Green "Der PC-Konfigurator hat Ihren Rechner konfiguriert und schließt sich in fünf Sekunden."
+    Write-Host -ForegroundColor Green " "
+    Start-Sleep -Seconds 5
 # Schließende Klammer für Confirm-OfficeClosure
 } else {
     Write-Host -ForegroundColor Red "Das Skript wurde durch den Benutzer abgebrochen."

@@ -4,6 +4,9 @@ setlocal
 title PC-Konfigurator Starter
 cd /d "%~dp0"
 
+set "RELEASE_VERSION=__RELEASE_VERSION__"
+set "RELEASE_DATE=__RELEASE_DATE__"
+
 set "SCRIPT_PATH=%~dp0src\PC-Konfigurator.ps1"
 
 if not exist "%SCRIPT_PATH%" (
@@ -15,7 +18,7 @@ if not exist "%SCRIPT_PATH%" (
 	exit /b 2
 )
 
-echo Starte PC-Konfigurator...
+echo Starte PC-Konfigurator... Version %RELEASE_VERSION% - erstellt am %RELEASE_DATE%
 echo.
 
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_PATH%"
@@ -31,5 +34,4 @@ if not "%EXITCODE%"=="0" (
 )
 
 echo.
-pause
 exit /b %EXITCODE%

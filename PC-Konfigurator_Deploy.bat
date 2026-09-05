@@ -52,5 +52,3 @@ if %errorlevel% equ 0 (
 )
 
 echo.
-echo Druecken Sie eine beliebige Taste zum Beenden...
-pause >nul

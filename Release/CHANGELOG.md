@@ -1,3 +1,309 @@
+## Version 2.13 - 2026-09-05 12:39
+
+**Aenderungen:**
+
+- Aktualisierte Office-Konfiguration, Dokumentation und Synchronisationsausgaben
+- Datei: PC-Konfigurator-v2.13.zip
+- Groesse: 63.72 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 2.12 - 2026-09-05 10:00
+
+**Aenderungen:**
+
+- Routine-Update
+- Datei: PC-Konfigurator-v2.12.zip
+- Groesse: 63.06 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 2.11 - 2026-09-05 09:55
+
+**Aenderungen:**
+
+- Routine-Update
+- Datei: PC-Konfigurator-v2.11.zip
+- Groesse: 62.97 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 2.10 - 2026-09-04 23:24
+
+**Aenderungen:**
+
+- Routine-Update
+- Datei: PC-Konfigurator-v2.10.zip
+- Groesse: 62.96 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 2.9 - 2026-09-04 23:16
+
+**Aenderungen:**
+
+- Routine-Update
+- Datei: PC-Konfigurator-v2.9.zip
+- Groesse: 62.96 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 2.8 - 2026-09-04 23:04
+
+**Aenderungen:**
+
+- Routine-Update
+- Datei: PC-Konfigurator-v2.8.zip
+- Groesse: 62.96 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 2.7 - 2026-09-04 16:14
+
+**Aenderungen:**
+
+- Routine-Update
+- Datei: PC-Konfigurator-v2.7.zip
+- Groesse: 61.62 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 2.6 - 2026-09-04 16:08
+
+**Aenderungen:**
+
+- Routine-Update
+- Datei: PC-Konfigurator-v2.6.zip
+- Groesse: 61.62 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 2.6 - 2026-09-04
+
+**Aenderungen:**
+
+- Schnellzugriffsvorlagen für Word und Excel ergänzt: Vorlagen aus `Datei-Vorlagen\Sonstiges\Symbolleiste Schnellzugriff` werden in den Office-Benutzerpfad übernommen (`Excel.officeUI`, `Word.officeUI`)
+- QAT-Setup robustifiziert: Prüfung der vorhandenen Office-Pfade vor dem Setzen der Schnellzugriffskonfiguration
+- Fehlerbehandlung bei Word-COM-Fehlern verständlich vereinfacht (`Word konnte nicht gestartet werden - COM-Fehler.`)
+- Dokumentation ergänzt: README, Anwender- und Techniker-Doku sowie Registry-Übersicht aktualisiert
+- Datei: PC-Konfigurator-v2.6.zip
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 2.5 - 2026-09-02 15:08
+
+**Aenderungen:**
+
+- Routine-Update
+- Datei: PC-Konfigurator-v2.5.zip
+- Groesse: 61.52 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 2.4 - 2026-09-01 16:16
+
+**Aenderungen:**
+
+- Routine-Update
+- Datei: PC-Konfigurator-v2.4.zip
+- Groesse: 61.52 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 2.3 - 2026-08-31 10:11
+
+**Aenderungen:**
+
+- Routine-Update
+- Datei: PC-Konfigurator-v2.3.zip
+- Groesse: 61.44 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 2.2 - 2026-08-16 18:53
+
+**Aenderungen:**
+
+- Release-Paket bereinigt: Entwicklerdateien (.editorconfig, node_modules, package.json, Lint-Skript, PSScriptAnalyzer-Settings) werden nicht mehr ausgeliefert
+- Datei: PC-Konfigurator-v2.2.zip
+- Groesse: 61.69 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 2.1 - 2026-08-16 18:27
+
+**Aenderungen:**
+
+- 32-Bit-Office-Kompatibilitaet: automatischer Wechsel in 32-Bit-PowerShell fuer Office-COM; Abschlussmeldung korrigiert und ans Skriptende nach dem optionalen Explorer-Neustart verschoben
+- Datei: PC-Konfigurator-v2.1.zip
+- Groesse: 62.92 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 2.0 - 2026-08-16 18:09
+
+**Aenderungen:**
+
+- Neues Release 2.0
+- Datei: PC-Konfigurator-v2.0.zip
+- Groesse: 63.58 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 19.1 - 2026-08-16 18:07
+
+**Aenderungen:**
+
+- Release 2.0 Initialversion mit major.minor Versionierung
+- Datei: PC-Konfigurator-v19.1.zip
+- Groesse: 63.58 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 19 - 2026-08-16 17:43
+
+**Aenderungen:**
+
+- Korrektur der doppelten Explorer-Abfrage; optionaler Neustart erscheint nur noch einmal
+- Datei: PC-Konfigurator-v19.zip
+- Groesse: 41.04 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 18 - 2026-08-16 17:38
+
+**Aenderungen:**
+
+- DryRun- und Validierungs-Verbesserungen in Registry-Setzungen
+- Datei: PC-Konfigurator-v18.zip
+- Groesse: 41.04 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
+## Version 17 - 2026-08-16 17:26
+
+**Aenderungen:**
+
+- Routine-Update nach Reihenfolge- und Such-Optionen
+- Datei: PC-Konfigurator-v17.zip
+- Groesse: 41.04 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
 ## Version 16 - 2026-06-12 18:04
 
 **Aenderungen:**
