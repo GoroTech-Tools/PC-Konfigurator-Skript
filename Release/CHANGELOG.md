@@ -1,3 +1,19 @@
+## Version 2.15 - 2026-09-06 13:08
+
+**Aenderungen:**
+
+- Corporate-Design-Farben werden direkt in Word-, Excel- und Outlook-Standardvorlagen eingebettet und zusätzlich für Office-Farbauswahllisten installiert. Deployment-Archivierung bei Versionsvorgabe abgesichert.
+- Datei: PC-Konfigurator-v2.15.zip
+- Groesse: 65.03 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
 ## Version 2.14 - 2026-09-06 11:53
 
 **Aenderungen:**

@@ -49,13 +49,13 @@ if (-not (Test-Path $archivPath)) {
 }
 
 # Hoechste vorhandene Version ermitteln (Format: vMajor.Minor, kompatibel mit altem vMajor)
+$releaseFiles = Get-ChildItem -Path $OutputFolder -Filter "$BaseName*.zip" -File
 if ($VersionOverride) {
     $newVersion = $VersionOverride.Trim()
 } else {
-    $files = Get-ChildItem -Path $OutputFolder -Filter "$BaseName*.zip" -File
     $latestVersion = [pscustomobject]@{ Major = 0; Minor = 0 }
 
-    foreach ($f in $files) {
+    foreach ($f in $releaseFiles) {
         if ($f.Name -match "^$([regex]::Escape($BaseName))-v(?<Major>\d+)(?:\.(?<Minor>\d+))?\.zip$") {
             $major = [int]$matches['Major']
             $minor = if ($matches['Minor']) { [int]$matches['Minor'] } else { 0 }
@@ -102,7 +102,7 @@ foreach ($releaseFolder in $releaseStagingFolders) {
 }
 
 # Aeltere Versionen ins Archiv verschieben
-foreach ($file in $files) {
+foreach ($file in $releaseFiles) {
     $archivFile = Join-Path $archivPath $file.Name
     Move-Item -Path $file.FullName -Destination $archivFile -Force
     Write-Output "Archiviert: $($file.Name)"
@@ -303,12 +303,12 @@ Write-Output "Datei: $zipPath"
 Write-Output "Groesse: $zipSize MB"
 Write-Output "Hinweise: $hinweisPath"
 Write-Output "Changelog: $changelogPath"
-Write-Output "Archivierte Dateien: $($files.Count)"
+Write-Output "Archivierte Dateien: $($releaseFiles.Count)"
 
-if ($files.Count -gt 0) {
+if ($releaseFiles.Count -gt 0) {
     Write-Output ""
     Write-Output "Archivierte Versionen:"
-    $files | ForEach-Object { Write-Output "  - $($_.Name)" }
+    $releaseFiles | ForEach-Object { Write-Output "  - $($_.Name)" }
 }
 
 Write-Output ""

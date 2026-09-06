@@ -57,6 +57,8 @@ Bei der Initialisierung werden Word und Excel für jeweils kurze Zeit mit `Windo
 ### Corporate Design und Outlook
 
 - Office-Themes werden abhängig von der Auswahl für INN-tegrativ, Duisdorfer BüroKonzept oder Careli bereitgestellt und in `Normal.dotm`, `Mappe.xltx` sowie `NormalEmail.dotm` eingebettet.
+- Die Theme-Einbettung ersetzt `word/theme/theme1.xml` beziehungsweise `xl/theme/theme1.xml` direkt im Open-XML-Container. Dadurch erscheinen die gewählten Akzentfarben zuverlässig in **Füllfarbe**, Rahmenfarbe und vergleichbaren Office-Farbpaletten, auch wenn Office-COM nicht verfügbar ist.
+- Das gewählte Farbschema wird zusätzlich unter `%APPDATA%\Microsoft\Templates\Theme Colors` installiert, damit es in den Office-Farbauswahllisten verfügbar ist.
 - Outlook erhält ohne Prozessstart Schriften für neue Nachrichten sowie Antworten/Weiterleitungen, die Anzeige von Kalenderwochen und die Vorlage `NormalEmail.dotm`.
 
 ### Taskleisten-Ausrichtung
