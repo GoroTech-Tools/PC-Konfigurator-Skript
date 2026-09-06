@@ -68,6 +68,11 @@ Windows-Taskleiste ab. Enter oder Auswahl `1` setzt die Windows-Standardoption
 **zentriert**; Auswahl `2` setzt **linksbündig**. `Set-TaskbarSettings` schreibt
 den entsprechenden Wert in `HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarAl`.
 
+Danach fragt das Skript die Anzeige versteckter Elemente ab. Enter oder Auswahl
+`1` setzt `Hidden = 1` und zeigt versteckte Dateien und Ordner an; Auswahl `2`
+setzt `Hidden = 2` und blendet sie aus. `ShowSuperHidden = 0` bleibt unverändert,
+damit geschützte Betriebssystemdateien nicht angezeigt werden.
+
 ## Schriftartauswahl
 
 Die interaktive Auswahl ordnet die Werte `1` bis `8` diesen Schriftfamilien zu: Aptos, Aptos Narrow, Arial, Calibri, Futura, PT Sans, Roboto und Segoe UI. Ohne bestätigte Auswahl setzt das Skript Aptos sowie 11 pt für Word/Outlook und 10 pt für Excel.

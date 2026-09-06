@@ -1132,6 +1132,7 @@ if (Confirm-OfficeClosure) {
             [string]$FontName = "Aptos",
             [int]$FontSizeWord = 11,
             [int]$FontSizeExcel = 10,
+            [bool]$ShowHiddenItems = $true,
             $wordSettings = @{
                 "DeveloperTools" = 1
                 "Ruler" = 1
@@ -1169,7 +1170,7 @@ if (Confirm-OfficeClosure) {
             },
             $windowsSettings = @{
                 "HideFileExt" = 0
-                "Hidden" = 1
+                "Hidden" = if ($ShowHiddenItems) { 1 } else { 2 }
                 "ShowSuperHidden" = 0
             }
         )
@@ -2189,6 +2190,25 @@ if (Confirm-OfficeClosure) {
     } until ($isValidTaskbarAlignment)
     Write-Log "Gewählte Taskleisten-Ausrichtung: $selectedTaskbarAlignment" "INFO"
 
+    # Benutzerabfrage: Anzeige versteckter Elemente im Datei-Explorer
+    Write-Host -ForegroundColor Cyan " "
+    Write-Host -ForegroundColor Yellow "Sollen versteckte Dateien und Ordner im Datei-Explorer angezeigt werden?"
+    Write-Host -ForegroundColor Cyan "1. Anzeigen (empfohlen)"
+    Write-Host -ForegroundColor Cyan "2. Nicht anzeigen"
+    do {
+        $hiddenItemsChoice = Read-Host "Ihre Auswahl (1-2, Enter für Anzeigen)"
+        switch ($hiddenItemsChoice) {
+            ''  { $showHiddenItems = $true; $isValidHiddenItemsChoice = $true }
+            '1' { $showHiddenItems = $true; $isValidHiddenItemsChoice = $true }
+            '2' { $showHiddenItems = $false; $isValidHiddenItemsChoice = $true }
+            default {
+                Write-Host -ForegroundColor Red "Ungültige Eingabe. Bitte wählen Sie 1 oder 2."
+                $isValidHiddenItemsChoice = $false
+            }
+        }
+    } until ($isValidHiddenItemsChoice)
+    Write-Log "Anzeige versteckter Elemente: $(if ($showHiddenItems) { 'aktiviert' } else { 'deaktiviert' })" "INFO"
+
     # Benutzerabfrage: Auswahl der Schriftart
     # Bestätigungsabfrage für Schriftart- und Schriftgrößenauswahl
         # --- NEU: Bestätigungsabfrage für Schriftart und Schriftgrößen ---
@@ -2317,7 +2337,7 @@ if (Confirm-OfficeClosure) {
             }
         }
     }
-    Set-OfficeRegistrySettings -FontName $ActualFontName -FontSizeWord $FontSizeWord -FontSizeExcel $FontSizeExcel
+    Set-OfficeRegistrySettings -FontName $ActualFontName -FontSizeWord $FontSizeWord -FontSizeExcel $FontSizeExcel -ShowHiddenItems $showHiddenItems
     $templateSyncResult = Sync-OfficeQuickAccessToolbarTemplates
     if ($templateSyncResult) {
         Write-Log "Vorlagen für Schnellzugriffe aus 'Datei-Vorlagen\Sonstiges\Symbolleiste Schnellzugriff' wurden übernommen." "INFO"

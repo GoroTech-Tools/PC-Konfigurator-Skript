@@ -17,7 +17,7 @@ Der PC-Konfigurator richtet Ihren Windows-PC automatisch mit Office-Vorlagen, Sc
 3. Wählen Sie den Installationsmodus:
    - **L** = Ziel-Laufwerk (z. B. USB/Netzwerk)
    - **D** = `%USERPROFILE%\Documents`
-4. Wählen Sie Corporate Design und Taskleisten-Ausrichtung; zentriert ist der Windows-Standard.
+4. Wählen Sie Corporate Design, Taskleisten-Ausrichtung und die Anzeige versteckter Elemente; zentriert beziehungsweise Anzeigen sind die Standardwerte.
 5. Optional: Schriftart und Schriftgrößen individuell festlegen.
 6. Warten Sie bis zum Abschlussdialog.
 
@@ -98,6 +98,7 @@ Ohne bestätigte individuelle Auswahl gelten Aptos, 11 pt für Word/Outlook und 
 - Zuletzt verwendete Dateien und häufig verwendete Ordner werden im Explorer ausgeblendet; der Verlauf wird bereinigt.
 - Der Desktop wird im Explorer-Schnellzugriff hinterlegt.
 - Die Taskleisten-Symbole können zentriert (Windows-Standard) oder linksbündig ausgerichtet werden; die Suche wird als Symbol angezeigt und Widgets werden ausgeblendet.
+- Versteckte Dateien und Ordner können angezeigt (Standard) oder ausgeblendet werden; geschützte Windows-Systemdateien bleiben stets verborgen.
 - Das Paket enthält mehr als 200 Excel- und Word-Vorlagen für Lernsituationen, Schriftverkehr, Bewerbungen, Formulare und Übungen.
 - Die DBK-Datenquelle kann als Verknüpfung nach `%USERPROFILE%\Meine Datenquellen` eingerichtet werden.
 

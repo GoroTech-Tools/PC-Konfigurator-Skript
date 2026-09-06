@@ -1,3 +1,19 @@
+## Version 2.16 - 2026-09-06 13:34
+
+**Aenderungen:**
+
+- Anzeige versteckter Dateien und Ordner im Datei-Explorer ist nun auswählbar; Anzeigen ist voreingestellt.
+- Datei: PC-Konfigurator-v2.16.zip
+- Groesse: 65.03 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
 ## Version 2.15 - 2026-09-06 13:08
 
 **Aenderungen:**
