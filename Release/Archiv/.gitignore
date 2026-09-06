@@ -1,5 +1,8 @@
-build/*
-!build/.gitkeep
-_Entwicklung
-node_modules/
-*.log
+# Das Archiv enthält ausschließlich frühere Release-Pakete und deren
+# dokumentierende Begleitdateien. Alle anderen Ablagen sind Fehlablagen.
+*
+!.gitignore
+!.gitkeep
+!PC-Konfigurator-v*.zip
+!*.md
+!*.html

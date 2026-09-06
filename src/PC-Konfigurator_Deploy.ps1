@@ -48,6 +48,24 @@ if (-not (Test-Path $archivPath)) {
     Write-Output "Archiv-Ordner erstellt: $archivPath"
 }
 
+# Das Archiv ist ausschließlich für alte Release-Pakete, Git-Platzhalter und
+# begleitende Dokumentation vorgesehen. Fehlablagen werden vor jedem Release
+# entfernt, damit Vorlagen, Fonts oder Fremdprojektdateien nicht anwachsen.
+$archiveFilesToRemove = Get-ChildItem -Path $archivPath -Recurse -Force -File |
+    Where-Object {
+        $_.Name -notin @('.gitignore', '.gitkeep') -and
+        $_.Name -notlike "$BaseName-v*.zip" -and
+        $_.Extension -notin @('.md', '.html')
+    }
+foreach ($archiveFile in $archiveFilesToRemove) {
+    Remove-Item -LiteralPath $archiveFile.FullName -Force
+    Write-Output "Archiv-Fehlablage entfernt: $($archiveFile.FullName)"
+}
+Get-ChildItem -Path $archivPath -Recurse -Force -Directory |
+    Sort-Object FullName -Descending |
+    Where-Object { -not (Get-ChildItem -LiteralPath $_.FullName -Force) } |
+    Remove-Item -Force
+
 # Hoechste vorhandene Version ermitteln (Format: vMajor.Minor, kompatibel mit altem vMajor)
 $releaseFiles = Get-ChildItem -Path $OutputFolder -Filter "$BaseName*.zip" -File
 if ($VersionOverride) {
