@@ -1,3 +1,19 @@
+## Version 2.17 - 2026-09-06 14:36
+
+**Aenderungen:**
+
+- Konsolenausgabe verbessert: klarere Abstände, COM-Hinweis hervorgehoben und kein abschließendes Pause im Starter.
+- Datei: PC-Konfigurator-v2.17.zip
+- Groesse: 65.03 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
 ## Version 2.16 - 2026-09-06 13:34
 
 **Aenderungen:**

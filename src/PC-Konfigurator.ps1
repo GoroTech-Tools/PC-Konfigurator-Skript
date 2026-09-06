@@ -1117,6 +1117,7 @@ if (Confirm-OfficeClosure) {
     # Zielpfad für die Sync-Funktion global setzen
     $BackupTargetPath = $targetTemplatePath
 
+    Write-Host -ForegroundColor Cyan " "
     Write-Host -ForegroundColor Cyan "⏳ Schritt 1/7: Outlook-Signaturen werden synchronisiert..."
     Write-Host -ForegroundColor Cyan " "
     # Outlook-Signaturen sichern bzw. bei Bedarf zurückkopieren
@@ -2174,8 +2175,10 @@ if (Confirm-OfficeClosure) {
     # Benutzerabfrage: Ausrichtung der Windows-11-Taskleiste
     Write-Host -ForegroundColor Cyan " "
     Write-Host -ForegroundColor Yellow "Wie sollen die Symbole auf der Windows-Taskleiste ausgerichtet werden?"
+    Write-Host -ForegroundColor Cyan " "
     Write-Host -ForegroundColor Cyan "1. Zentriert (Windows-Standard)"
     Write-Host -ForegroundColor Cyan "2. Linksbündig"
+    Write-Host -ForegroundColor Cyan "   "
     do {
         $taskbarChoice = Read-Host "Ihre Auswahl (1-2, Enter für zentriert)"
         switch ($taskbarChoice) {
@@ -2193,8 +2196,10 @@ if (Confirm-OfficeClosure) {
     # Benutzerabfrage: Anzeige versteckter Elemente im Datei-Explorer
     Write-Host -ForegroundColor Cyan " "
     Write-Host -ForegroundColor Yellow "Sollen versteckte Dateien und Ordner im Datei-Explorer angezeigt werden?"
+    Write-Host -ForegroundColor Cyan " "
     Write-Host -ForegroundColor Cyan "1. Anzeigen (empfohlen)"
     Write-Host -ForegroundColor Cyan "2. Nicht anzeigen"
+    Write-Host -ForegroundColor Cyan "   "
     do {
         $hiddenItemsChoice = Read-Host "Ihre Auswahl (1-2, Enter für Anzeigen)"
         switch ($hiddenItemsChoice) {
@@ -2217,6 +2222,7 @@ if (Confirm-OfficeClosure) {
     Write-Host -foregroundcolor Cyan " "
     Write-Host -ForegroundColor Yellow "Möchten Sie Schriftart und Schriftgrößen individuell auswählen? (Ja/Nein)"
     Write-Host -ForegroundColor Yellow "Sollten Sie dies ablehnen, werden die Standardwerte Aptos (11pt für Word/Outlook, 10pt für Excel) verwendet."
+    Write-Host -ForegroundColor Yellow "   "
     $fontConfirm = Read-Host
     if ($fontConfirm -match "^(Ja|ja|J|j|Y|y)$") {
         # Schriftart-Auswahl
@@ -2830,6 +2836,7 @@ if (Confirm-OfficeClosure) {
     }
 
     # Aufruf der Funktionen NACH der Schriftart- und Schriftgrößen-Auswahl
+    Write-Host -ForegroundColor Cyan " "
     Write-Host -ForegroundColor Cyan "⏳ Schritt 2/7: Word-Vorlagen werden angepasst..."
     Write-Host -ForegroundColor Cyan " "
     if ($selectedOfficeThemePath) {
@@ -2840,11 +2847,13 @@ if (Confirm-OfficeClosure) {
         Write-Host -ForegroundColor Cyan "  ⚠ Schritt 2/7 abgeschlossen mit Hinweis: Corporate Design konnte nicht eingebettet werden."
     }
 
+    Write-Host -ForegroundColor Cyan " "
     Write-Host -ForegroundColor Cyan "⏳ Schritt 3/7: Word-Lernsituationen werden angepasst..."
     Write-Host -ForegroundColor Cyan " "
     Set-WordLernsituationenCustomizer -FontName $ActualFontName -FontSize $FontSizeWord
     Write-Host -foregroundcolor Green "  ✓ Schritt 3/7 abgeschlossen: Word-Lernsituationen wurden verarbeitet."
 
+    Write-Host -ForegroundColor Cyan " "
     Write-Host -ForegroundColor Cyan "⏳ Schritt 4/7: Excel-Vorlagen werden angepasst..."
     Write-Host -ForegroundColor Cyan " "
     if ($selectedOfficeThemePath) {
@@ -2858,12 +2867,14 @@ if (Confirm-OfficeClosure) {
         Write-Host -ForegroundColor Cyan "  ⚠ Schritt 4/7 abgeschlossen mit Hinweis: Corporate Design konnte nicht eingebettet werden."
     }
 
+    Write-Host -ForegroundColor Cyan " "
     Write-Host -ForegroundColor Cyan "⏳ Schritt 5/7: Registry-Einstellungen werden gesetzt..."
     Write-Host -ForegroundColor Cyan " "
     # Aufruf der Auto-Korrektureinstellungen
     Set-WordAutoCorrectRegistry
     Write-Host -foregroundcolor Green "  ✓ Schritt 5/7 abgeschlossen: Registry-Einstellungen wurden verarbeitet."
 
+    Write-Host -ForegroundColor Cyan " "
     Write-Host -ForegroundColor Cyan "⏳ Schritt 6/7: Windows-Einstellungen werden angepasst..."
     Write-Host -ForegroundColor Cyan " "
 
@@ -3150,7 +3161,7 @@ if (Confirm-OfficeClosure) {
 
     Write-Host "   "
     # Benutzerabfrage: Explorer-Neustart
-    Write-Host -foregroundcolor Yellow "Eine gegebenenfalls auftretende Meldung für COM-Fehler ist nicht kritisch; sie kann ignoriert werden, da die wichtigsten Anpassungen bereits erfolgreich durchgeführt wurden."
+    Write-Host -foregroundcolor Red "Eine gegebenenfalls auftretende Meldung für COM-Fehler ist nicht kritisch; sie kann ignoriert werden, da die wichtigsten Anpassungen bereits erfolgreich durchgeführt wurden."
     Write-Host -foregroundcolor Yellow " "
     Write-Host -foregroundcolor Yellow "Möchten Sie den Windows-Explorer neustarten, um die Taskleisten-Änderungen sofort anzuwenden?"
     Write-Host -ForegroundColor Yellow "(Dies kann 30-60 Sekunden dauern, ist aber optional)"
