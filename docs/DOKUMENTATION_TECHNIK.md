@@ -56,8 +56,15 @@ Bei der Initialisierung werden Word und Excel für jeweils kurze Zeit mit `Windo
 
 ### Corporate Design und Outlook
 
-- Office-Themes werden abhängig von der Auswahl für INN-tegrativ, Duisdorfer BüroKonzept oder Careli bereitgestellt.
+- Office-Themes werden abhängig von der Auswahl für INN-tegrativ, Duisdorfer BüroKonzept oder Careli bereitgestellt und in `Normal.dotm`, `Mappe.xltx` sowie `NormalEmail.dotm` eingebettet.
 - Outlook erhält ohne Prozessstart Schriften für neue Nachrichten sowie Antworten/Weiterleitungen, die Anzeige von Kalenderwochen und die Vorlage `NormalEmail.dotm`.
+
+### Taskleisten-Ausrichtung
+
+Nach der Auswahl des Corporate Designs fragt das Skript die Ausrichtung der
+Windows-Taskleiste ab. Enter oder Auswahl `1` setzt die Windows-Standardoption
+**zentriert**; Auswahl `2` setzt **linksbündig**. `Set-TaskbarSettings` schreibt
+den entsprechenden Wert in `HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarAl`.
 
 ## Schriftartauswahl
 

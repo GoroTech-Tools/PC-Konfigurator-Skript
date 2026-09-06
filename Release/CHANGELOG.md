@@ -1,3 +1,19 @@
+## Version 2.14 - 2026-09-06 11:53
+
+**Aenderungen:**
+
+- Corporate-Design-Einbettung für Word, Excel und Outlook aktualisiert; Taskleisten-Ausrichtung ist jetzt auswählbar (zentriert oder linksbündig).
+- Datei: PC-Konfigurator-v2.14.zip
+- Groesse: 65.03 MB
+
+**Systemanforderungen:**
+
+- Windows 10 (Build 18362+) oder Windows 11
+- Office 2013 oder neuer
+- Administrator-Rechte empfohlen
+
+---
+
 ## Version 2.13 - 2026-09-05 12:39
 
 **Aenderungen:**

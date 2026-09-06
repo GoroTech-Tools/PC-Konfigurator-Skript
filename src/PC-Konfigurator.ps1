@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$DryRun
 )
 
@@ -77,9 +77,10 @@ if ([Environment]::Is64BitProcess -and -not $env:PCK_ARCH_RELAUNCH) {
 ### In der Laufwerksauswahl (L) wird zusätzlich (für private Zwecke) das Verzeichnis Documents (D) des jeweiligen Anwendenden
 ### zur Auswahl angeboten.
 
-$logDir = Join-Path $env:USERPROFILE "Documents\PC-Konfigurator\Logs"
+$documentsPath = [Environment]::GetFolderPath('MyDocuments')
+$logDir = Join-Path $documentsPath "PC-Konfigurator\Logs"
 $logFile = Join-Path $logDir "Log_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-$robocopyLogDir = Join-Path $env:USERPROFILE "Documents\PC-Konfigurator\Robocopy-Logs"
+$robocopyLogDir = Join-Path $documentsPath "PC-Konfigurator\Robocopy-Logs"
 $BackupTargetPath = $null
 
 function Confirm-OfficeClosure {
@@ -114,7 +115,7 @@ function Write-Log {
     )
     try {
         if ([string]::IsNullOrWhiteSpace($logDir)) {
-            $logDir = Join-Path $env:USERPROFILE "Documents\PC-Konfigurator\Logs"
+            $logDir = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "PC-Konfigurator\Logs"
         }
         if ([string]::IsNullOrWhiteSpace($logFile)) {
             $logFile = Join-Path $logDir "Log_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
@@ -279,11 +280,11 @@ if (Confirm-OfficeClosure) {
     Disable-ExplorerRecentAndFrequent
 
     # Globaler Pfad für Logs
-    $logDir = Join-Path $env:USERPROFILE "Documents\PC-Konfigurator\Logs"
+    $logDir = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "PC-Konfigurator\Logs"
     $logFile = Join-Path $logDir "Log_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
 
     # Robocopy-Log-Verzeichnis global definieren
-    $robocopyLogDir = Join-Path $env:USERPROFILE "Documents\PC-Konfigurator\Robocopy-Logs"
+    $robocopyLogDir = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "PC-Konfigurator\Robocopy-Logs"
 
     function Write-Log {
         param(
@@ -911,82 +912,53 @@ if (Confirm-OfficeClosure) {
     }
     # Ende der Funktion sync()
 
-    # Überschreibe Mappe.xltx
-    function CopyExcelTemplate {
-        # Pfad zur Zieldatei im Benutzerprofil
-        $targetPath = Join-Path -Path $env:APPDATA -ChildPath "Microsoft\Excel\XLSTART\Mappe.xltx"
+    function Install-SelectedOfficeTemplates {
+        param(
+            [Parameter(Mandatory = $true)][string]$FontName,
+            [Parameter(Mandatory = $true)][int]$FontSizeWord,
+            [Parameter(Mandatory = $true)][int]$FontSizeExcel
+        )
 
-        # Pfad zur Quelldatei relativ zum Skriptverzeichnis
-        $sourcePath = Join-Path -Path $PSScriptRoot -ChildPath "..\Datei-Vorlagen\Sonstiges\Standards\Mappe.xltx"
-
-        # Prüfen, ob die Datei bereits existiert
-        if (Test-Path -Path $targetPath) {
-            # Write-Output "Die Datei existiert bereits: $targetPath"
-            return
+        $sourceRoot = Join-Path $PSScriptRoot '..\Datei-Vorlagen\Sonstiges\Standards'
+        $backupRoot = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "PC-Konfigurator\Backups\Vorlagen_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+        $templates = @{
+            Word = @{
+                Source = "Normal-$FontName-$FontSizeWord.dotm"
+                Destination = Join-Path $env:APPDATA 'Microsoft\Templates\Normal.dotm'
+            }
+            Excel = @{
+                Source = "Mappe-$FontName-$FontSizeExcel.xltx"
+                Destination = Join-Path $env:APPDATA 'Microsoft\Excel\XLSTART\Mappe.xltx'
+            }
+            Outlook = @{
+                Source = "NormalEmail-$FontName-$FontSizeWord.dotm"
+                Destination = Join-Path $env:APPDATA 'Microsoft\Templates\NormalEmail.dotm'
+            }
         }
 
-        # Sicherstellen, dass das Zielverzeichnis existiert
-        $targetDirectory = Split-Path -Path $targetPath -Parent
-        if (-not (Test-Path -Path $targetDirectory)) {
-            New-Item -Path $targetDirectory -ItemType Directory -Force | Out-Null
+        foreach ($template in $templates.GetEnumerator()) {
+            $sourcePath = Join-Path $sourceRoot $template.Value.Source
+            if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+                throw "Vorbereitete $($template.Key)-Vorlage fehlt: $sourcePath"
+            }
         }
 
-        # Datei kopieren
-        Copy-Item -Path $sourcePath -Destination $targetPath -Force
-        Write-Log "Die Datei Mappe.xltx wurde erfolgreich kopiert nach: $targetPath" "INFO"
+        Get-Process WINWORD, EXCEL, OUTLOOK -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        foreach ($template in $templates.GetEnumerator()) {
+            $sourcePath = Join-Path $sourceRoot $template.Value.Source
+            $destinationPath = $template.Value.Destination
+            New-Item -ItemType Directory -Path (Split-Path $destinationPath -Parent) -Force | Out-Null
+            if (Test-Path -LiteralPath $destinationPath -PathType Leaf) {
+                New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
+                Copy-Item -LiteralPath $destinationPath -Destination (Join-Path $backupRoot (Split-Path $destinationPath -Leaf)) -Force -ErrorAction Stop
+                Write-Log "Vorhandene $($template.Key)-Vorlage gesichert: $destinationPath" "INFO"
+            }
+            Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force -ErrorAction Stop
+            Write-Log "Vorbereitete $($template.Key)-Vorlage übernommen: $sourcePath -> $destinationPath" "INFO"
+        }
+
+        Write-Log "Vorbereitete Office-Vorlagen wurden ohne COM-Automatisierung übernommen: $FontName (Word/Outlook $FontSizeWord pt, Excel $FontSizeExcel pt)." "INFO"
     }
-    CopyExcelTemplate
-
-    # Überschreibe Normal.dotm
-    function CopyWordTemplate {
-        # Pfad zur Zieldatei im Benutzerprofil
-        $targetPath = Join-Path -Path $env:APPDATA -ChildPath "Microsoft\Templates\Normal.dotm"
-
-        # Pfad zur Quelldatei relativ zum Skriptverzeichnis
-        $sourcePath = Join-Path -Path $PSScriptRoot -ChildPath "..\Datei-Vorlagen\Sonstiges\Standards\Normal.dotm"
-
-        # Prüfen, ob die Datei bereits existiert
-        if (Test-Path -Path $targetPath) {
-            Write-Log "Die Datei Normal.dotm existiert bereits: $targetPath" "INFO"
-            return
-        }
-
-        # Sicherstellen, dass das Zielverzeichnis existiert
-        $targetDirectory = Split-Path -Path $targetPath -Parent
-        if (-not (Test-Path -Path $targetDirectory)) {
-            New-Item -Path $targetDirectory -ItemType Directory -Force | Out-Null
-        }
-
-        # Datei kopieren
-        Copy-Item -Path $sourcePath -Destination $targetPath -Force
-        Write-Log "Die Datei Normal.dotm wurde erfolgreich kopiert nach: $targetPath" "INFO"
-    }
-    CopyWordTemplate
-
-    function CopyOutlookTemplate {
-        # Pfad zur Zieldatei im Benutzerprofil
-        $targetPath = Join-Path -Path $env:APPDATA -ChildPath "Microsoft\Templates\NormalEmail.dotm"
-
-        # Pfad zur Quelldatei relativ zum Skriptverzeichnis
-        $sourcePath = Join-Path -Path $PSScriptRoot -ChildPath "..\Datei-Vorlagen\Sonstiges\Standards\NormalEmail.dotm"
-
-        # Prüfen, ob die Datei bereits existiert
-        if (Test-Path -Path $targetPath) {
-            Write-Log "Die Datei NormalEmail.dotm existiert bereits: $targetPath" "INFO"
-            return
-        }
-
-        # Sicherstellen, dass das Zielverzeichnis existiert
-        $targetDirectory = Split-Path -Path $targetPath -Parent
-        if (-not (Test-Path -Path $targetDirectory)) {
-            New-Item -Path $targetDirectory -ItemType Directory -Force | Out-Null
-        }
-
-        # Datei kopieren
-        Copy-Item -Path $sourcePath -Destination $targetPath -Force
-        Write-Log "Die Datei NormalEmail.dotm wurde erfolgreich kopiert nach: $targetPath" "INFO"
-    }
-    CopyOutlookTemplate
 
     ### Initialisierung der Office-Programme
     ###
@@ -1879,6 +1851,21 @@ if (Confirm-OfficeClosure) {
             }
         )
 
+        $newOutlookInstalled = $false
+        try {
+            $newOutlookInstalled = [bool](Get-AppxPackage -Name 'Microsoft.OutlookForWindows' -ErrorAction SilentlyContinue)
+        } catch {
+            Write-Log "Neue Outlook-App konnte nicht erkannt werden: $($_.Exception.Message)" "WARN"
+        }
+        $newOutlookRunning = [bool](Get-Process -Name 'olk' -ErrorAction SilentlyContinue)
+        $classicOutlookRunning = [bool](Get-Process -Name 'OUTLOOK' -ErrorAction SilentlyContinue)
+        if ($newOutlookInstalled -or $newOutlookRunning) {
+            Write-Log "Neue Outlook-App erkannt (installiert=$newOutlookInstalled, aktiv=$newOutlookRunning). Lokale MailSettings/NormalEmail.dotm gelten nur für klassisches Outlook; die neue Outlook-App muss über ihre eigenen Microsoft-365-Einstellungen konfiguriert werden." "WARN"
+        }
+        if ($classicOutlookRunning) {
+            Write-Log "Klassisches Outlook erkannt; lokale Outlook-Schriftwerte werden gesetzt." "INFO"
+        }
+
         if ([string]::IsNullOrWhiteSpace($FontName)) { $FontName = "Aptos" }
         if ($FontSize -lt 1) { $FontSize = 11 }
 
@@ -1894,13 +1881,14 @@ if (Confirm-OfficeClosure) {
             }
 
             # Outlook speichert die wirksamen Schriftdefinitionen als REG_BINARY.
-            # TextFontComplex/ReplyFontComplex enthalten UTF-8-HTML mit CSS.
-            foreach ($name in @('TextFontComplex', 'ReplyFontComplex')) {
+            # ComposeFontComplex (neue Nachrichten), ReplyFontComplex (Antworten)
+            # und TextFontComplex (Nur-Text) enthalten UTF-8-HTML mit CSS.
+            foreach ($name in @('ComposeFontComplex', 'ReplyFontComplex', 'TextFontComplex')) {
                 $existingComplex = (Get-ItemProperty -Path $Path -Name $name -ErrorAction SilentlyContinue).$name
                 if ($existingComplex -is [byte[]] -and $existingComplex.Length -gt 0) {
                     $complexFont = [System.Text.Encoding]::UTF8.GetString($existingComplex)
                     $complexFont = [regex]::Replace($complexFont, 'font-size:\s*[\d.]+pt', "font-size:$($FontSize).0pt")
-                    $complexFont = [regex]::Replace($complexFont, 'font-family:\s*"[^"]+"', "font-family:`"$FontName`"")
+                    $complexFont = [regex]::Replace($complexFont, 'font-family:\s*(?:"[^"]+"|[^;\r\n]+)', "font-family:`"$FontName`",sans-serif")
                 } else {
                     $complexFont = "<html>`r`n<style>`r`n p.MsoPlainText, li.MsoPlainText, div.MsoPlainText { font-size:$($FontSize).0pt; font-family:`"$FontName`",sans-serif; }`r`n</style>`r`n</html>`r`n"
                 }
@@ -1912,26 +1900,20 @@ if (Confirm-OfficeClosure) {
             # Die Simple-Werte enthalten eine serialisierte Fontdefinition. Wenn
             # Outlook bereits eine solche Definition besitzt, wird nur der Name im
             # vorhandenen Blob ersetzt; unbekannte Binärfelder bleiben unverändert.
-            foreach ($name in @('TextFontSimple', 'ReplyFontSimple')) {
+            foreach ($name in @('ComposeFontSimple', 'ReplyFontSimple', 'TextFontSimple')) {
                 $existing = (Get-ItemProperty -Path $Path -Name $name -ErrorAction SilentlyContinue).$name
-                if ($existing -is [byte[]] -and $existing.Length -gt 0) {
+                if ($existing -is [byte[]] -and $existing.Length -gt 26) {
                     $bytes = [byte[]]$existing.Clone()
                     $ascii = [System.Text.Encoding]::ASCII
-                    $text = $ascii.GetString($bytes)
-                    if ($text -match '"[^"]+"') {
-                        $replacement = '"' + $FontName + '"'
-                        $replacementBytes = $ascii.GetBytes($replacement)
-                        $matchStart = $text.IndexOf('"')
-                        $matchEnd = $text.IndexOf('"', $matchStart + 1)
-                        $fieldLength = $matchEnd - $matchStart + 1
-                        if ($replacementBytes.Length -le $fieldLength) {
-                            [Array]::Clear($bytes, $matchStart, $fieldLength)
-                            [Array]::Copy($replacementBytes, 0, $bytes, $matchStart, $replacementBytes.Length)
-                            Set-ItemProperty -Path $Path -Name $name -Value $bytes -Type Binary -Force
-                            Write-Log "Outlook-MailSettings aktualisiert: $name = $FontName" "INFO"
-                        } else {
-                            Write-Log "Outlook-MailSettings $name nicht geändert: Fontname ist für den vorhandenen Binärbereich zu lang." "WARN"
-                        }
+                    $fontOffset = 26
+                    $replacementBytes = $ascii.GetBytes($FontName)
+                    if ($replacementBytes.Length -le ($bytes.Length - $fontOffset)) {
+                        [Array]::Clear($bytes, $fontOffset, $bytes.Length - $fontOffset)
+                        [Array]::Copy($replacementBytes, 0, $bytes, $fontOffset, $replacementBytes.Length)
+                        Set-ItemProperty -Path $Path -Name $name -Value $bytes -Type Binary -Force
+                        Write-Log "Outlook-MailSettings aktualisiert: $name = $FontName" "INFO"
+                    } else {
+                        Write-Log "Outlook-MailSettings $name nicht geändert: Fontname ist für den Binärbereich zu lang." "WARN"
                     }
                 }
             }
@@ -2112,6 +2094,25 @@ if (Confirm-OfficeClosure) {
     } until ($isValidDesign)
     Write-Log "Gewähltes Corporate Design: $selectedDesign" "INFO"
 
+    # Benutzerabfrage: Ausrichtung der Windows-11-Taskleiste
+    Write-Host -ForegroundColor Cyan " "
+    Write-Host -ForegroundColor Yellow "Wie sollen die Symbole auf der Windows-Taskleiste ausgerichtet werden?"
+    Write-Host -ForegroundColor Cyan "1. Zentriert (Windows-Standard)"
+    Write-Host -ForegroundColor Cyan "2. Linksbündig"
+    do {
+        $taskbarChoice = Read-Host "Ihre Auswahl (1-2, Enter für zentriert)"
+        switch ($taskbarChoice) {
+            ''  { $selectedTaskbarAlignment = 'Center'; $isValidTaskbarAlignment = $true }
+            '1' { $selectedTaskbarAlignment = 'Center'; $isValidTaskbarAlignment = $true }
+            '2' { $selectedTaskbarAlignment = 'Left'; $isValidTaskbarAlignment = $true }
+            default {
+                Write-Host -ForegroundColor Red "Ungültige Eingabe. Bitte wählen Sie 1 oder 2."
+                $isValidTaskbarAlignment = $false
+            }
+        }
+    } until ($isValidTaskbarAlignment)
+    Write-Log "Gewählte Taskleisten-Ausrichtung: $selectedTaskbarAlignment" "INFO"
+
     # Benutzerabfrage: Auswahl der Schriftart
     # Bestätigungsabfrage für Schriftart- und Schriftgrößenauswahl
         # --- NEU: Bestätigungsabfrage für Schriftart und Schriftgrößen ---
@@ -2220,6 +2221,13 @@ if (Confirm-OfficeClosure) {
     Write-Log "Gewählte Schriftgröße für Excel: $FontSizeExcel Punkte" "INFO"
 
     # Erst jetzt sind die finalen (gewählten oder Standard-)Werte zuverlässig vorhanden.
+    try {
+        Install-SelectedOfficeTemplates -FontName $ActualFontName -FontSizeWord $FontSizeWord -FontSizeExcel $FontSizeExcel
+        Write-Host -ForegroundColor Green "Vorbereitete Word-, Excel- und Outlook-Vorlagen wurden übernommen."
+    } catch {
+        Write-Log "Vorbereitete Office-Vorlagen konnten nicht übernommen werden: $($_.Exception.Message)" "ERROR"
+        throw
+    }
     $selectedOfficeThemePath = Install-SelectedOfficeTheme -FontName $ActualFontName -Design $selectedDesign
     Set-OfficeRegistrySettings -FontName $ActualFontName -FontSizeWord $FontSizeWord -FontSizeExcel $FontSizeExcel
     $templateSyncResult = Sync-OfficeQuickAccessToolbarTemplates
@@ -2292,13 +2300,15 @@ if (Confirm-OfficeClosure) {
 
     function Set-OutlookTemplateTheme {
         param (
-            [Parameter(Mandatory = $true)][string]$ThemePath
+            [Parameter(Mandatory = $true)][string]$TemplatePath,
+            [string]$ThemePath,
+            [Parameter(Mandatory = $true)][string]$FontName,
+            [Parameter(Mandatory = $true)][int]$FontSize
         )
 
-        $templatePath = Join-Path $env:APPDATA 'Microsoft\Templates\NormalEmail.dotm'
-        if (-not (Test-Path -LiteralPath $templatePath -PathType Leaf)) {
-            Write-Log "NormalEmail.dotm für Theme-Anpassung nicht gefunden: $templatePath" "WARN"
-            return
+        if (-not (Test-Path -LiteralPath $TemplatePath -PathType Leaf)) {
+            Write-Log "NormalEmail.dotm für Theme-Anpassung nicht gefunden: $TemplatePath" "WARN"
+            return $false
         }
 
         $word = $null
@@ -2307,14 +2317,19 @@ if (Confirm-OfficeClosure) {
             Get-Process WINWORD -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
             $word = New-Object -ComObject Word.Application -ErrorAction Stop
             $word.Visible = $false
-            $template = $word.Documents.Open($templatePath, $false, $false)
+            $template = $word.Documents.Open($TemplatePath, $false, $false)
             [void](Set-WordDocumentTheme -Document $template -ThemePath $ThemePath)
+            $normalStyle = $template.Styles.Item(-1)
+            $normalStyle.Font.Name = $FontName
+            $normalStyle.Font.Size = $FontSize
             $template.Save()
             $template.Close($false)
-            Write-Log "Outlook-Theme in NormalEmail.dotm übernommen." "INFO"
+            Write-Log "Outlook-Theme und Schrift in NormalEmail.dotm übernommen: $FontName / $FontSize pt." "INFO"
+            return $true
         } catch {
             Write-Log "Outlook-Theme konnte nicht in NormalEmail.dotm übernommen werden: $($_.Exception.Message)" "WARN"
             if ($template) { try { $template.Close($false) } catch { $null = $_.Exception.Message } }
+            return $false
         } finally {
             if ($word) {
                 try { $word.Quit() } catch { $null = $_.Exception.Message }
@@ -2630,10 +2645,12 @@ if (Confirm-OfficeClosure) {
     function Set-ExcelCustomizer {
         param (
             [string]$FontName = "Aptos", # Standard-Schriftart, falls keine angegeben wird
-            [int]$FontSize = 10 # Standard-Schriftgröße, falls keine angegeben wird
+            [int]$FontSize = 10, # Standard-Schriftgröße, falls keine angegeben wird
+            [Parameter(Mandatory = $true)][string]$TemplatePath
         )
 
         Write-Log "Set-ExcelCustomizer gestartet..." "INFO"
+        $templatePrepared = $false
 
         try {
             # Starte die Excel-Anwendung
@@ -2653,7 +2670,7 @@ if (Confirm-OfficeClosure) {
             }
 
             # 2. Mappe.xltx Vorlage anpassen
-            $excelTemplatePath = [System.IO.Path]::Combine($env:APPDATA, 'Microsoft\Excel\XLSTART\Mappe.xltx')
+            $excelTemplatePath = $TemplatePath
 
             if (Test-Path $excelTemplatePath) {
                 try {
@@ -2676,39 +2693,17 @@ if (Confirm-OfficeClosure) {
                     $workbook.SaveAs($excelTemplatePath, 54) # Excel Template Format
                     $workbook.Close($false)
                     Write-Log "Mappe.xltx wurde erfolgreich angepasst." "INFO"
+                    $templatePrepared = $true
                 } catch {
                     Write-Log "Fehler beim Anpassen der Mappe.xltx: $($_.Exception.Message)" "ERROR"
                 }
             }
 
-            # 3. Neue leere Arbeitsmappe erstellen und als Vorlage speichern
-            try {
-                $newWorkbook = $excel.Workbooks.Add()
-                [void](Set-ExcelWorkbookTheme -Workbook $newWorkbook -ThemePath $selectedOfficeThemePath)
-
-                # Standard-Style für neue Arbeitsmappe setzen
-                $normalStyle = $newWorkbook.Styles.Item("Normal")
-                $normalStyle.Font.Name = $FontName
-                $normalStyle.Font.Size = $FontSize
-
-                # Erstes Arbeitsblatt formatieren
-                $worksheet = $newWorkbook.Worksheets.Item(1)
-                $worksheet.Cells.Font.Name = $FontName
-                $worksheet.Cells.Font.Size = $FontSize
-
-                # Als book.xltx im XLSTART Verzeichnis speichern (alternative Vorlage)
-                $alternativeTemplatePath = [System.IO.Path]::Combine($env:APPDATA, 'Microsoft\Excel\XLSTART\book.xltx')
-                Remove-Item $alternativeTemplatePath -Force -ErrorAction SilentlyContinue
-                $newWorkbook.SaveAs($alternativeTemplatePath, 54)
-                $newWorkbook.Close($false)
-                Write-Log "Alternative Excel-Vorlage (book.xltx) erstellt." "INFO"
-            } catch {
-                Write-Log "Fehler beim Erstellen der alternativen Vorlage: $($_.Exception.Message)" "WARN"
-            }
-
             Write-Log "Excel-Customizer erfolgreich abgeschlossen." "INFO"
+            return $templatePrepared
         } catch {
             Write-Log "Fehler in Set-ExcelCustomizer: $($_.Exception.Message)" "ERROR"
+            return $false
         } finally {
             # Excel-Anwendung ordnungsgemäß schließen
             if ($excel) {
@@ -2729,61 +2724,13 @@ if (Confirm-OfficeClosure) {
     # Aufruf der Funktionen NACH der Schriftart- und Schriftgrößen-Auswahl
     Write-Host -ForegroundColor Cyan "⏳ Schritt 2/7: Word-Vorlagen werden angepasst..."
     Write-Host -ForegroundColor Cyan " "
-    try {
-        # Vereinfachte Word Normal.dotm Anpassung mit Timeout-Schutz
-
-        # Stelle sicher, dass Word geschlossen ist
-        Get-Process WINWORD -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 1
-
-        try {
-            $wordAvailability = Test-WordComAvailability
-            if (-not $wordAvailability.IsAvailable) {
-                $userFriendlyWordError = 'Word konnte nicht gestartet werden - COM-Fehler.'
-                Write-Host -ForegroundColor Cyan "  ⚠ Word-Konfiguration übersprungen: $userFriendlyWordError"
-                Write-Log "Word-Konfiguration übersprungen: $userFriendlyWordError" "WARN"
-                throw [System.Exception]::new($userFriendlyWordError)
-            }
-
-            $word = New-Object -ComObject Word.Application
-            $word.Visible = $false
-            $word.DisplayAlerts = 0
-
-            # Öffne Normal.dotm direkt
-            $normalPath = $word.NormalTemplate.FullName
-            $normalTemplate = $word.Documents.Open($normalPath)
-            [void](Set-WordDocumentTheme -Document $normalTemplate -ThemePath $selectedOfficeThemePath)
-
-            # Ändere Standard-Style
-            $standardStyle = $normalTemplate.Styles.Item("Standard")
-            $standardStyle.Font.Name = $ActualFontName
-            $standardStyle.Font.Size = $FontSizeWord
-            $standardStyle.ParagraphFormat.SpaceAfter = 0
-            $standardStyle.ParagraphFormat.LineSpacing = 12
-            Set-WordHeadingStyles -Styles $normalTemplate.Styles -FontName $ActualFontName
-
-            # Speichere und schließe
-            $normalTemplate.Save()
-            $normalTemplate.Close($false)
-            $word.Quit()
-
-            # COM-Cleanup
-            [System.Runtime.Interopservices.Marshal]::ReleaseComObject($normalTemplate) | Out-Null
-            [System.Runtime.Interopservices.Marshal]::ReleaseComObject($word) | Out-Null
-            [GC]::Collect()
-
-
-        } catch {
-            $userFriendlyWordError = 'Word konnte nicht gestartet werden - COM-Fehler.'
-            Write-Host -ForegroundColor Cyan "  ⚠ Word-Konfiguration übersprungen: $userFriendlyWordError"
-            Write-Log "Word-Konfiguration übersprungen: $userFriendlyWordError" "WARN"
-        }
-
-    } catch {
-        Write-Host -ForegroundColor Red "  ✗ Word-Konfiguration fehlgeschlagen"
-        Write-Log "Word-Konfiguration fehlgeschlagen: $($_.Exception.Message)" "ERROR"
+    if ($selectedOfficeThemePath) {
+        Set-WordCustomizer -FontName $ActualFontName -FontSize $FontSizeWord
+        Write-Host -foregroundcolor Green "  ✓ Schritt 2/7 abgeschlossen: Word-Vorlage und Corporate Design wurden übernommen."
+    } else {
+        Write-Log "Schritt 2/7: Kein Corporate-Design verfügbar; die vorbereitete Normal.dotm wurde ohne Theme-Einbettung übernommen." "WARN"
+        Write-Host -ForegroundColor Cyan "  ⚠ Schritt 2/7 abgeschlossen mit Hinweis: Corporate Design konnte nicht eingebettet werden."
     }
-    Write-Host -foregroundcolor Green "  ✓ Schritt 2/7 abgeschlossen: Word-Vorlagen wurden verarbeitet."
 
     Write-Host -ForegroundColor Cyan "⏳ Schritt 3/7: Word-Lernsituationen werden angepasst..."
     Write-Host -ForegroundColor Cyan " "
@@ -2792,11 +2739,15 @@ if (Confirm-OfficeClosure) {
 
     Write-Host -ForegroundColor Cyan "⏳ Schritt 4/7: Excel-Vorlagen werden angepasst..."
     Write-Host -ForegroundColor Cyan " "
-    Set-ExcelCustomizer -FontName $ActualFontName -FontSize $FontSizeExcel
-    Write-Host -foregroundcolor Green "  ✓ Schritt 4/7 abgeschlossen: Excel-Vorlagen wurden verarbeitet."
-
     if ($selectedOfficeThemePath) {
-        Set-OutlookTemplateTheme -ThemePath $selectedOfficeThemePath
+        $excelTemplatePath = Join-Path $env:APPDATA 'Microsoft\Excel\XLSTART\Mappe.xltx'
+        Set-ExcelCustomizer -FontName $ActualFontName -FontSize $FontSizeExcel -TemplatePath $excelTemplatePath
+        $outlookTemplatePath = Join-Path $env:APPDATA 'Microsoft\Templates\NormalEmail.dotm'
+        Set-OutlookTemplateTheme -TemplatePath $outlookTemplatePath -ThemePath $selectedOfficeThemePath -FontName $ActualFontName -FontSize $FontSizeWord
+        Write-Host -foregroundcolor Green "  ✓ Schritt 4/7 abgeschlossen: Excel-, Outlook-Vorlagen und Corporate Design wurden übernommen."
+    } else {
+        Write-Log "Schritt 4/7: Kein Corporate-Design verfügbar; Mappe.xltx und NormalEmail.dotm wurden ohne Theme-Einbettung übernommen." "WARN"
+        Write-Host -ForegroundColor Cyan "  ⚠ Schritt 4/7 abgeschlossen mit Hinweis: Corporate Design konnte nicht eingebettet werden."
     }
 
     Write-Host -ForegroundColor Cyan "⏳ Schritt 5/7: Registry-Einstellungen werden gesetzt..."
@@ -2887,8 +2838,8 @@ if (Confirm-OfficeClosure) {
         }
     }
 
-    # Funktion aufrufen, um die Taskleiste linksbündig auszurichten und das Suchsymbol anzuzeigen
-    Set-TaskbarSettings -Alignment "Left" -Search "Icon"
+    # Die im Assistenten gewählte Ausrichtung anwenden; das Suchsymbol bleibt sichtbar.
+    Set-TaskbarSettings -Alignment $selectedTaskbarAlignment -Search "Icon"
 
     function Restart-ExplorerIfRunning {
         # Prüfe, ob explorer.exe läuft

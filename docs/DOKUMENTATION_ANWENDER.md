@@ -17,8 +17,9 @@ Der PC-Konfigurator richtet Ihren Windows-PC automatisch mit Office-Vorlagen, Sc
 3. Wählen Sie den Installationsmodus:
    - **L** = Ziel-Laufwerk (z. B. USB/Netzwerk)
    - **D** = `%USERPROFILE%\Documents`
-4. Optional: Schriftart und Schriftgrößen individuell festlegen.
-5. Warten Sie bis zum Abschlussdialog.
+4. Wählen Sie Corporate Design und Taskleisten-Ausrichtung; zentriert ist der Windows-Standard.
+5. Optional: Schriftart und Schriftgrößen individuell festlegen.
+6. Warten Sie bis zum Abschlussdialog.
 
 Während der Initialisierung startet der PC-Konfigurator Word und Excel kurz minimiert und beendet sie anschließend wieder. Outlook wird nicht geöffnet.
 
@@ -79,7 +80,7 @@ Ohne bestätigte individuelle Auswahl gelten Aptos, 11 pt für Word/Outlook und 
 
 - Schrift und Schriftgröße für neue E-Mails sowie für Antworten und Weiterleitungen werden gesetzt.
 - Die Kalenderwoche wird eingeblendet und `NormalEmail.dotm` bereitgestellt.
-- Je nach Auswahl werden Farbschemata für INN-tegrativ, Duisdorfer BüroKonzept oder Careli bereitgestellt.
+- Je nach Auswahl wird das Farbschema für INN-tegrativ, Duisdorfer BüroKonzept oder Careli in die Word-, Excel- und Outlook-Standardvorlagen eingebettet.
 
 ## Hinweise zur Bedienung
 
@@ -96,7 +97,7 @@ Ohne bestätigte individuelle Auswahl gelten Aptos, 11 pt für Word/Outlook und 
 
 - Zuletzt verwendete Dateien und häufig verwendete Ordner werden im Explorer ausgeblendet; der Verlauf wird bereinigt.
 - Der Desktop wird im Explorer-Schnellzugriff hinterlegt.
-- Die Taskleiste wird links ausgerichtet, die Suche als Symbol angezeigt und Widgets werden ausgeblendet.
+- Die Taskleisten-Symbole können zentriert (Windows-Standard) oder linksbündig ausgerichtet werden; die Suche wird als Symbol angezeigt und Widgets werden ausgeblendet.
 - Das Paket enthält mehr als 200 Excel- und Word-Vorlagen für Lernsituationen, Schriftverkehr, Bewerbungen, Formulare und Übungen.
 - Die DBK-Datenquelle kann als Verknüpfung nach `%USERPROFILE%\Meine Datenquellen` eingerichtet werden.
 
